@@ -1,0 +1,63 @@
+# ─────────────────────────────────────────────────────────────────
+#  RustFS — single-node mode (local development)
+#
+#  Topology:
+#    rustfs-nginx  →  rustfs  (1 node, NGINX handles SSL)
+#
+#  Ports (host):
+#    ${RUSTFS_S3_PORT:-9000}      S3 API  (HTTPS via nginx)
+#    ${RUSTFS_CONSOLE_PORT:-9001} Web console (HTTPS via nginx)
+# ─────────────────────────────────────────────────────────────────
+
+services:
+  rustfs:
+    image: ${RUSTFS_IMAGE:-rustfs/rustfs:latest-glibc}
+    container_name: ing-lakehouse-rustfs
+    env_file:
+      - ../../.env
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin123}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: "0.0.0.0:9000"
+      RUSTFS_CONSOLE_ADDRESS: "0.0.0.0:9001"
+      RUSTFS_OBS_LOGGER_LEVEL: ${RUSTFS_LOG_LEVEL:-info}
+    volumes:
+      - rustfs-sn-data:/data
+    networks:
+      - lakehouse-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  rustfs-nginx:
+    image: nginx:1.27-alpine
+    container_name: ing-lakehouse-rustfs-nginx
+    volumes:
+      - ./config/nginx.singlenode.conf:/etc/nginx/conf.d/rustfs.conf:ro
+      - ../../certs/rustfs.pem:/etc/nginx/certs/rustfs.pem:ro
+      - ../../certs/rustfs-key.pem:/etc/nginx/certs/rustfs-key.pem:ro
+    ports:
+      - "${RUSTFS_S3_PORT:-9000}:9000"
+      - "${RUSTFS_CONSOLE_PORT:-9001}:9001"
+    networks:
+      - lakehouse-net
+    depends_on:
+      rustfs:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf --insecure https://localhost:9000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  rustfs-sn-data:
+    name: ing-lakehouse_rustfs-sn-data
+
+# lakehouse-net is defined in the root docker-compose.local.yml and inherited via include:

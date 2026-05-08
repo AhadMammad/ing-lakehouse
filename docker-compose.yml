@@ -1,0 +1,26 @@
+name: ing-lakehouse
+
+# ─────────────────────────────────────────────────────────────────
+#  Distributed mode — full cluster topology for demos.
+#  RustFS: 4 nodes + NGINX LB  |  Spark: master + 2 workers
+#  Kafka: 3 brokers (KRaft)
+#
+#  Use:  make up-dist     Start distributed cluster
+#        make down-dist   Stop distributed cluster
+#        make up          Start single-node local stack (default)
+# ─────────────────────────────────────────────────────────────────
+
+include:
+  - services/rustfs/docker-compose.distributed.yml
+  - services/spark/docker-compose.distributed.yml
+  - services/kafka/docker-compose.distributed.yml
+  # ── future services ──────────────────────────────────────────
+  # - services/trino/docker-compose.yml
+  # - services/hive/docker-compose.yml
+  # - services/airflow/docker-compose.yml
+
+networks:
+  # Shared network — every service attaches to this so cross-service
+  # communication works without additional configuration.
+  lakehouse-net:
+    driver: bridge

@@ -1,0 +1,6 @@
+# SSL certificates — generated locally via scripts/setup-certs.sh
+certs/
+
+# Local environment overrides
+.env.local
+.env.*.local

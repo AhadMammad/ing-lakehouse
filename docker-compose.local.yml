@@ -1,0 +1,22 @@
+name: ing-lakehouse
+
+# ─────────────────────────────────────────────────────────────────
+#  Local development mode — single-node for all services.
+#  RustFS: 1 node + NGINX (SSL)  |  Spark: master only
+#  Kafka: 1 broker (KRaft)
+#
+#  Use:  make up          Start local single-node stack (default)
+#        make down        Stop local stack
+#        make up-dist     Start distributed cluster for demos
+# ─────────────────────────────────────────────────────────────────
+
+include:
+  - services/rustfs/docker-compose.singlenode.yml
+  - services/spark/docker-compose.singlenode.yml
+  - services/kafka/docker-compose.singlenode.yml
+
+networks:
+  # Shared network — every service attaches to this so cross-service
+  # communication works without additional configuration.
+  lakehouse-net:
+    driver: bridge

@@ -1,0 +1,51 @@
+# ─────────────────────────────────────────────────────────────────
+#  Kafka — single-node mode (1 broker, KRaft, local development)
+#
+#  Topology:
+#    kafka  (broker + controller combined, no Zookeeper)
+#
+#  Ports (host):
+#    ${KAFKA_BROKER_PORT:-9092}  Kafka client endpoint
+#
+#  KRaft:  Single-node quorum, replication factor 1
+# ─────────────────────────────────────────────────────────────────
+
+services:
+  kafka:
+    image: ${KAFKA_IMAGE:-apache/kafka:3.7.0}
+    container_name: ing-lakehouse-kafka
+    env_file:
+      - ../../.env
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID}
+    ports:
+      - "${KAFKA_BROKER_PORT:-9092}:9092"
+    volumes:
+      - kafka-sn-data:/var/lib/kafka/data
+    networks:
+      - lakehouse-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  kafka-sn-data:
+    name: ing-lakehouse_kafka-sn-data
+
+# lakehouse-net is defined in the root docker-compose.local.yml and inherited via include:

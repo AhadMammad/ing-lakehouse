@@ -1,0 +1,105 @@
+# ─────────────────────────────────────────────────────────────────
+#  RustFS — 4-node distributed object storage (S3-compatible)
+#
+#  Topology:
+#    rustfs-nginx  →  rustfs1 / rustfs2 / rustfs3 / rustfs4
+#
+#  Ports (host):
+#    ${RUSTFS_S3_PORT:-9000}     S3 API  (via nginx round-robin LB)
+#    ${RUSTFS_CONSOLE_PORT:-9001} Web console (via nginx — any healthy node)
+# ─────────────────────────────────────────────────────────────────
+
+x-rustfs-common: &rustfs-common
+  image: ${RUSTFS_IMAGE:-rustfs/rustfs:latest-glibc}
+  env_file:
+    - ../../.env
+  environment:
+    RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+    RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin123}
+    RUSTFS_VOLUMES: >-
+      http://rustfs1:9000/data
+      http://rustfs2:9000/data
+      http://rustfs3:9000/data
+      http://rustfs4:9000/data
+    RUSTFS_ADDRESS: "0.0.0.0:9000"
+    RUSTFS_CONSOLE_ADDRESS: "0.0.0.0:9001"
+    RUSTFS_OBS_LOGGER_LEVEL: ${RUSTFS_LOG_LEVEL:-info}
+  networks:
+    - lakehouse-net
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD-SHELL", "curl -sf http://localhost:9000/health || exit 1"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+    start_period: 20s
+
+services:
+  # ── Node 1 ─────────────────────────────────────────────────────
+  rustfs1:
+    <<: *rustfs-common
+    container_name: ing-lakehouse-rustfs1
+    volumes:
+      - rustfs-data-1:/data
+
+  # ── Node 2 ─────────────────────────────────────────────────────
+  rustfs2:
+    <<: *rustfs-common
+    container_name: ing-lakehouse-rustfs2
+    volumes:
+      - rustfs-data-2:/data
+
+  # ── Node 3 ─────────────────────────────────────────────────────
+  rustfs3:
+    <<: *rustfs-common
+    container_name: ing-lakehouse-rustfs3
+    volumes:
+      - rustfs-data-3:/data
+
+  # ── Node 4 ─────────────────────────────────────────────────────
+  rustfs4:
+    <<: *rustfs-common
+    container_name: ing-lakehouse-rustfs4
+    volumes:
+      - rustfs-data-4:/data
+
+  # ── NGINX load balancer (S3 API entry point) ───────────────────
+  rustfs-nginx:
+    image: nginx:1.27-alpine
+    container_name: ing-lakehouse-rustfs-nginx
+    volumes:
+      - ./config/nginx.conf:/etc/nginx/conf.d/rustfs.conf:ro
+      - ../../certs/rustfs.pem:/etc/nginx/certs/rustfs.pem:ro
+      - ../../certs/rustfs-key.pem:/etc/nginx/certs/rustfs-key.pem:ro
+    ports:
+      - "${RUSTFS_S3_PORT:-9000}:9000"
+      - "${RUSTFS_CONSOLE_PORT:-9001}:9001"
+    networks:
+      - lakehouse-net
+    depends_on:
+      rustfs1:
+        condition: service_healthy
+      rustfs2:
+        condition: service_healthy
+      rustfs3:
+        condition: service_healthy
+      rustfs4:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf --insecure https://localhost:9000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  rustfs-data-1:
+    name: ing-lakehouse_rustfs-data-1
+  rustfs-data-2:
+    name: ing-lakehouse_rustfs-data-2
+  rustfs-data-3:
+    name: ing-lakehouse_rustfs-data-3
+  rustfs-data-4:
+    name: ing-lakehouse_rustfs-data-4
+
+# lakehouse-net is defined in the root docker-compose.yml and inherited via include:

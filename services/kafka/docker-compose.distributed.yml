@@ -1,0 +1,88 @@
+# ─────────────────────────────────────────────────────────────────
+#  Kafka — distributed mode (3 brokers, KRaft cluster)
+#
+#  Topology:
+#    kafka-1  ─┐
+#    kafka-2  ─┼─  KRaft quorum (each node is broker + controller)
+#    kafka-3  ─┘
+#
+#  Ports (host):
+#    ${KAFKA_BROKER_PORT:-9092}   kafka-1 client endpoint
+#    ${KAFKA_BROKER2_PORT:-9094}  kafka-2 client endpoint
+#    ${KAFKA_BROKER3_PORT:-9095}  kafka-3 client endpoint
+#
+#  Controller port 9093 is internal only (not exposed on host).
+#  Replication factor 3, MIN_ISR 2.
+# ─────────────────────────────────────────────────────────────────
+
+x-kafka-common: &kafka-common
+  image: ${KAFKA_IMAGE:-apache/kafka:3.7.0}
+  env_file:
+    - ../../.env
+  environment:
+    KAFKA_PROCESS_ROLES: broker,controller
+    KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-1:9093,2@kafka-2:9093,3@kafka-3:9093
+    KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+    KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+    KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+    KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+    KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+    KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+    KAFKA_LOG_DIRS: /var/lib/kafka/data
+    CLUSTER_ID: ${KAFKA_CLUSTER_ID}
+  networks:
+    - lakehouse-net
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
+    interval: 15s
+    timeout: 10s
+    retries: 5
+    start_period: 45s
+
+services:
+  kafka-1:
+    <<: *kafka-common
+    container_name: ing-lakehouse-kafka-1
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:9092
+    ports:
+      - "${KAFKA_BROKER_PORT:-9092}:9092"
+    volumes:
+      - kafka-dist-data-1:/var/lib/kafka/data
+
+  kafka-2:
+    <<: *kafka-common
+    container_name: ing-lakehouse-kafka-2
+    environment:
+      KAFKA_NODE_ID: 2
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:9092
+    ports:
+      - "${KAFKA_BROKER2_PORT:-9094}:9092"
+    volumes:
+      - kafka-dist-data-2:/var/lib/kafka/data
+
+  kafka-3:
+    <<: *kafka-common
+    container_name: ing-lakehouse-kafka-3
+    environment:
+      KAFKA_NODE_ID: 3
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:9092
+    ports:
+      - "${KAFKA_BROKER3_PORT:-9095}:9092"
+    volumes:
+      - kafka-dist-data-3:/var/lib/kafka/data
+
+volumes:
+  kafka-dist-data-1:
+    name: ing-lakehouse_kafka-dist-data-1
+  kafka-dist-data-2:
+    name: ing-lakehouse_kafka-dist-data-2
+  kafka-dist-data-3:
+    name: ing-lakehouse_kafka-dist-data-3
+
+# lakehouse-net is defined in the root docker-compose.yml and inherited via include:

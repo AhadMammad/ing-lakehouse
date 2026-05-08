@@ -1,0 +1,86 @@
+# ─────────────────────────────────────────────────────────────────
+#  Spark — distributed mode (master + 2 workers)
+#
+#  Topology:
+#    spark-master  →  spark-worker-1
+#                 →  spark-worker-2
+#
+#  Ports (host):
+#    ${SPARK_MASTER_UI_PORT:-8080}  Spark master web UI
+#    ${SPARK_MASTER_PORT:-7077}     Spark master port (for job submission)
+# ─────────────────────────────────────────────────────────────────
+
+services:
+  spark-master:
+    image: ${SPARK_IMAGE:-apache/spark:3.5.3}
+    container_name: ing-lakehouse-spark-master
+    user: root
+    env_file:
+      - ../../.env
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
+    environment:
+      SPARK_MASTER_HOST: spark-master
+      SPARK_MASTER_PORT: "7077"
+      SPARK_MASTER_WEBUI_PORT: "8080"
+    ports:
+      - "${SPARK_MASTER_UI_PORT:-8080}:8080"
+      - "${SPARK_MASTER_PORT:-7077}:7077"
+    volumes:
+      - spark-dist-work:/opt/spark/work
+    networks:
+      - lakehouse-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  spark-worker-1:
+    image: ${SPARK_IMAGE:-apache/spark:3.5.3}
+    container_name: ing-lakehouse-spark-worker-1
+    user: root
+    env_file:
+      - ../../.env
+    command:
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.worker.Worker
+      - spark://spark-master:7077
+    environment:
+      SPARK_WORKER_MEMORY: ${SPARK_WORKER_MEMORY:-2g}
+      SPARK_WORKER_CORES: ${SPARK_WORKER_CORES:-2}
+      SPARK_WORKER_WEBUI_PORT: "8081"
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    networks:
+      - lakehouse-net
+    restart: unless-stopped
+
+  spark-worker-2:
+    image: ${SPARK_IMAGE:-apache/spark:3.5.3}
+    container_name: ing-lakehouse-spark-worker-2
+    user: root
+    env_file:
+      - ../../.env
+    command:
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.worker.Worker
+      - spark://spark-master:7077
+    environment:
+      SPARK_WORKER_MEMORY: ${SPARK_WORKER_MEMORY:-2g}
+      SPARK_WORKER_CORES: ${SPARK_WORKER_CORES:-2}
+      SPARK_WORKER_WEBUI_PORT: "8081"
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    networks:
+      - lakehouse-net
+    restart: unless-stopped
+
+volumes:
+  spark-dist-work:
+    name: ing-lakehouse_spark-dist-work
+
+# lakehouse-net is defined in the root docker-compose.yml and inherited via include:
