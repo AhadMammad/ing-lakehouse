@@ -31,14 +31,18 @@ CONSOLE_PORT := $(or $(RUSTFS_CONSOLE_PORT),9001)
 SPARK_UI     := $(or $(SPARK_MASTER_UI_PORT),8080)
 KAFKA_PORT   := $(or $(KAFKA_BROKER_PORT),9092)
 RUSTFS_HOST  := $(or $(RUSTFS_DOMAIN),rustfs.lakehouse.local)
+NESSIE_PORT_VAR          := $(or $(NESSIE_PORT),19120)
+JUPYTER_PORT_VAR         := $(or $(JUPYTER_PORT),8888)
+ICEBERG_WAREHOUSE_BUCKET := $(or $(ICEBERG_WAREHOUSE_BUCKET),iceberg-warehouse)
 
 .DEFAULT_GOAL := help
 .PHONY: help \
         up up-dist down down-dist restart restart-dist pull pull-dist clean clean-dist \
         status status-dist ps \
         logs logs-dist logs-rustfs logs-rustfs-dist logs-spark logs-spark-dist \
-        logs-kafka logs-kafka-dist logs-node \
+        logs-kafka logs-kafka-dist logs-nessie logs-jupyter logs-node \
         health health-dist console console-dist network \
+        nessie-init-bucket \
         setup-certs
 
 # ── Help ───────────────────────────────────────────────────────────
@@ -69,6 +73,8 @@ help:
 	@printf "  $(BLUE)logs-spark-dist$(RESET)  $(DIM)Spark master + worker logs (distributed)$(RESET)\n"
 	@printf "  $(BLUE)logs-kafka$(RESET)       $(DIM)Kafka logs (local)$(RESET)\n"
 	@printf "  $(BLUE)logs-kafka-dist$(RESET)  $(DIM)Kafka broker logs (distributed)$(RESET)\n"
+	@printf "  $(BLUE)logs-nessie$(RESET)      $(DIM)Nessie catalog logs (local)$(RESET)\n"
+	@printf "  $(BLUE)logs-jupyter$(RESET)     $(DIM)Jupyter notebook server logs (local)$(RESET)\n"
 	@printf "  $(BLUE)logs-node$(RESET)        $(DIM)Logs for one container  (NODE=kafka-2)$(RESET)\n"
 	@printf "  $(GREEN)health$(RESET)           $(DIM)Health check all local services$(RESET)\n"
 	@printf "  $(GREEN)health-dist$(RESET)      $(DIM)Health check all distributed services$(RESET)\n"
@@ -77,6 +83,8 @@ help:
 	@printf "  $(CYAN)console$(RESET)          $(DIM)Print local endpoints and credentials$(RESET)\n"
 	@printf "  $(CYAN)console-dist$(RESET)     $(DIM)Print distributed endpoints and credentials$(RESET)\n"
 	@printf "  $(CYAN)setup-certs$(RESET)      $(DIM)Generate SSL certs for RustFS (requires mkcert)$(RESET)\n"
+	@printf "\n$(BOLD)  Iceberg$(RESET)\n"
+	@printf "  $(CYAN)nessie-init-bucket$(RESET)  $(DIM)Create Iceberg warehouse bucket in RustFS (run once after make up)$(RESET)\n"
 	@printf "\n$(DIM)  Variables: NODE=<container-name> (default: rustfs)$(RESET)\n\n"
 
 # ── Lifecycle: local ───────────────────────────────────────────────
@@ -88,6 +96,8 @@ up:
 	@printf "$(DIM)   RustFS UI    → https://$(RUSTFS_HOST):$(CONSOLE_PORT)$(RESET)\n"
 	@printf "$(DIM)   Spark UI     → http://localhost:$(SPARK_UI)$(RESET)\n"
 	@printf "$(DIM)   Kafka        → localhost:$(KAFKA_PORT)$(RESET)\n"
+	@printf "$(DIM)   Nessie       → http://localhost:$(NESSIE_PORT_VAR)$(RESET)\n"
+	@printf "$(DIM)   Jupyter      → http://localhost:$(JUPYTER_PORT_VAR)?token=$(JUPYTER_TOKEN)$(RESET)\n"
 
 down:
 	@printf "$(BOLD)$(RED)▶  Stopping ing-lakehouse (local)...$(RESET)\n"
@@ -164,6 +174,14 @@ logs-kafka:
 	@printf "$(BOLD)$(BLUE)▶  Streaming Kafka logs (local, Ctrl-C to exit)...$(RESET)\n"
 	@$(COMPOSE_LOCAL) logs -f --tail=100 kafka
 
+logs-nessie:
+	@printf "$(BOLD)$(BLUE)▶  Streaming Nessie logs (local, Ctrl-C to exit)...$(RESET)\n"
+	@$(COMPOSE_LOCAL) logs -f --tail=100 nessie
+
+logs-jupyter:
+	@printf "$(BOLD)$(BLUE)▶  Streaming Jupyter logs (local, Ctrl-C to exit)...$(RESET)\n"
+	@$(COMPOSE_LOCAL) logs -f --tail=100 jupyter
+
 # ── Observability: distributed ─────────────────────────────────────
 status-dist:
 	@printf "$(BOLD)$(CYAN)▶  ing-lakehouse (distributed) — container status$(RESET)\n\n"
@@ -192,7 +210,7 @@ logs-node:
 # ── Health checks ──────────────────────────────────────────────────
 health:
 	@printf "$(BOLD)$(GREEN)▶  Checking local service health...$(RESET)\n\n"
-	@for svc in ing-lakehouse-rustfs ing-lakehouse-spark ing-lakehouse-kafka; do \
+	@for svc in ing-lakehouse-rustfs ing-lakehouse-spark ing-lakehouse-kafka ing-lakehouse-nessie ing-lakehouse-jupyter; do \
 		printf "  $(CYAN)$$svc$(RESET)  "; \
 		status=$$(docker inspect --format='{{.State.Health.Status}}' $$svc 2>/dev/null || echo "not found"); \
 		if [ "$$status" = "healthy" ]; then \
@@ -257,6 +275,8 @@ console:
 	@printf "  $(BOLD)Password$(RESET)     $(RUSTFS_SECRET_KEY)\n\n"
 	@printf "  $(BOLD)Spark UI$(RESET)     http://localhost:$(SPARK_UI)\n"
 	@printf "  $(BOLD)Kafka$(RESET)        localhost:$(KAFKA_PORT)\n\n"
+	@printf "  $(BOLD)Nessie$(RESET)       http://localhost:$(NESSIE_PORT_VAR)\n"
+	@printf "  $(BOLD)Jupyter$(RESET)      http://localhost:$(JUPYTER_PORT_VAR)?token=$(JUPYTER_TOKEN)\n\n"
 	@printf "  $(DIM)aws s3 --endpoint-url https://$(RUSTFS_HOST):$(S3_PORT) ls$(RESET)\n\n"
 
 console-dist:
@@ -273,6 +293,29 @@ console-dist:
 	@printf "    kafka-2  localhost:$(KAFKA_BROKER2_PORT)\n"
 	@printf "    kafka-3  localhost:$(KAFKA_BROKER3_PORT)\n\n"
 	@printf "  $(DIM)Bootstrap: localhost:$(KAFKA_PORT),localhost:$(KAFKA_BROKER2_PORT),localhost:$(KAFKA_BROKER3_PORT)$(RESET)\n\n"
+
+# ── Iceberg / Nessie ───────────────────────────────────────────────
+nessie-init-bucket:
+	@printf "$(BOLD)$(CYAN)▶  Creating Iceberg warehouse bucket '$(ICEBERG_WAREHOUSE_BUCKET)' in RustFS...$(RESET)\n"
+	@docker run --rm \
+		--network ing-lakehouse_lakehouse-net \
+		-e AWS_ACCESS_KEY_ID=$(RUSTFS_ACCESS_KEY) \
+		-e AWS_SECRET_ACCESS_KEY=$(RUSTFS_SECRET_KEY) \
+		-e AWS_DEFAULT_REGION=us-east-1 \
+		amazon/aws-cli:latest \
+		s3api head-bucket \
+		--bucket $(ICEBERG_WAREHOUSE_BUCKET) \
+		--endpoint-url http://rustfs:9000 2>/dev/null \
+	|| docker run --rm \
+		--network ing-lakehouse_lakehouse-net \
+		-e AWS_ACCESS_KEY_ID=$(RUSTFS_ACCESS_KEY) \
+		-e AWS_SECRET_ACCESS_KEY=$(RUSTFS_SECRET_KEY) \
+		-e AWS_DEFAULT_REGION=us-east-1 \
+		amazon/aws-cli:latest \
+		s3api create-bucket \
+		--bucket $(ICEBERG_WAREHOUSE_BUCKET) \
+		--endpoint-url http://rustfs:9000
+	@printf "$(GREEN)✔  Bucket '$(ICEBERG_WAREHOUSE_BUCKET)' is ready.$(RESET)\n"
 
 # ── SSL setup ──────────────────────────────────────────────────────
 setup-certs:
