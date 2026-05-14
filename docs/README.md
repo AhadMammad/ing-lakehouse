@@ -1,6 +1,6 @@
 # ing-lakehouse
 
-A modular, service-per-directory data lakehouse platform built for Azerbaijani data engineering workflows. Each component is independently deployable and shares a single Docker network (`lakehouse-net`) for seamless cross-service communication.
+A modular, service-per-directory data lakehouse platform built for data engineering workflows. Each component is independently deployable and shares a single Docker network (`lakehouse-net`) for seamless cross-service communication.
 
 ---
 
