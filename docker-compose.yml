@@ -14,9 +14,10 @@ include:
   - services/rustfs/docker-compose.distributed.yml
   - services/spark/docker-compose.distributed.yml
   - services/kafka/docker-compose.distributed.yml
+  - services/nessie/docker-compose.singlenode.yml
+  - services/jupyter/docker-compose.singlenode.yml
   # ── future services ──────────────────────────────────────────
   # - services/trino/docker-compose.yml
-  # - services/hive/docker-compose.yml
   # - services/airflow/docker-compose.yml
 
 networks:

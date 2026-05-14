@@ -17,7 +17,7 @@ graph TD
     end
 
     subgraph Storage Layer
-        RustFS["RustFS\n(S3-compatible)"]
+        RustFS["RustFS<br/>(S3-compatible)"]
     end
 
     Spark  -->|s3a://| RustFS
@@ -38,9 +38,9 @@ This means the console remains reachable even if any individual node goes down �
 
 ```mermaid
 graph TD
-    Client(["Client\n(SDK / CLI / Browser)"])
+    Client(["Client<br/>(SDK / CLI / Browser)"])
 
-    Client -->|"S3 API  :9000"| NGINX["rustfs-nginx\nNGINX load balancer"]
+    Client -->|"S3 API  :9000"| NGINX["rustfs-nginx<br/>NGINX load balancer"]
     Client -->|"Console :9001"| NGINX
 
     NGINX -->|":9000 S3"| N1["rustfs1"]
@@ -72,12 +72,12 @@ graph LR
     subgraph ing-lakehouse Docker Compose
 
     
-        nginx["rustfs-nginx\nhost :9000 S3\nhost :9001 console"]
+        nginx["rustfs-nginx<br/>host :9000 S3<br/>host :9001 console"]
 
-        nginx --> n1["rustfs1\n:9000 + :9001"]
-        nginx --> n2["rustfs2\n:9000 + :9001"]
-        nginx --> n3["rustfs3\n:9000 + :9001"]
-        nginx --> n4["rustfs4\n:9000 + :9001"]
+        nginx --> n1["rustfs1<br/>:9000 + :9001"]
+        nginx --> n2["rustfs2<br/>:9000 + :9001"]
+        nginx --> n3["rustfs3<br/>:9000 + :9001"]
+        nginx --> n4["rustfs4<br/>:9000 + :9001"]
 
         n1 --- v1[("rustfs-data-1")]
         n2 --- v2[("rustfs-data-2")]
@@ -141,7 +141,7 @@ sequenceDiagram
 With 4 nodes using RS(2,2) erasure coding:
 
 | Nodes failed | Cluster status |
-|---|---|
+| --- | --- |
 | 0 | Fully operational |
 | 1 | Fully operational (degraded) |
 | 2 | Fully operational (degraded) |
@@ -155,7 +155,7 @@ The cluster can survive the simultaneous loss of any **2 nodes** while continuin
 ## Component Responsibilities
 
 | Component | Role |
-|---|---|
+| --- | --- |
 | `rustfs-nginx` | Single entry point — load-balances both S3 API (:9000) and web console (:9001) across all nodes; logs each request with the upstream node address via `$upstream_addr` |
 | `rustfs1–4` | Data nodes — each runs the S3 API and a console process; NGINX picks any healthy node for either traffic type |
 | `lakehouse-net` | Shared Docker network for cross-service communication |
@@ -168,7 +168,7 @@ The cluster can survive the simultaneous loss of any **2 nodes** while continuin
 Key environment variables (set in root `.env`):
 
 | Variable | Description |
-|---|---|
+| --- | --- |
 | `RUSTFS_ACCESS_KEY` | S3 root access key |
 | `RUSTFS_SECRET_KEY` | S3 root secret key |
 | `RUSTFS_VOLUMES` | Space-separated list of all node data endpoints |

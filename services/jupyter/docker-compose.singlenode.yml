@@ -1,0 +1,55 @@
+# ─────────────────────────────────────────────────────────────────
+#  Jupyter — Notebook server for lakehouse exploration (single-node)
+#
+#  Topology:
+#    jupyter  (1 container, built from services/jupyter/Dockerfile)
+#
+#  Ports (host):
+#    ${JUPYTER_PORT:-8888}   JupyterLab web UI
+#
+#  Access:
+#    http://localhost:8888?token=lakehouse
+#
+#  Mounts:
+#    notebooks/  →  /home/jovyan/work  (notebooks persist on host)
+# ─────────────────────────────────────────────────────────────────
+
+services:
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ing-lakehouse-jupyter:latest
+    container_name: ing-lakehouse-jupyter
+    env_file:
+      - ../../.env
+    environment:
+      JUPYTER_TOKEN: ${JUPYTER_TOKEN:-lakehouse}
+      # Nessie Iceberg REST catalog endpoint (inside Docker network)
+      NESSIE_URI: http://nessie:19120/iceberg
+      # RustFS S3 — connect directly to the rustfs container (plain HTTP),
+      # not via nginx, because nginx terminates TLS with a self-signed cert
+      # that boto3/s3fs would reject without extra trust config.
+      AWS_S3_ENDPOINT: http://rustfs:9000
+      AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin123}
+      AWS_REGION: us-east-1
+      ICEBERG_WAREHOUSE_BUCKET: ${ICEBERG_WAREHOUSE_BUCKET:-iceberg-warehouse}
+    ports:
+      - "${JUPYTER_PORT:-8888}:8888"
+    volumes:
+      - ../../notebooks:/home/jovyan/work
+    networks:
+      - lakehouse-net
+    depends_on:
+      nessie:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8888/api || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+# lakehouse-net is defined in the root docker-compose.local.yml and inherited via include:

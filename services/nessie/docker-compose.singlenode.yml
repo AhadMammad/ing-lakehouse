@@ -1,0 +1,44 @@
+# ─────────────────────────────────────────────────────────────────
+#  Project Nessie — Iceberg REST Catalog (single-node)
+#
+#  Topology:
+#    nessie  (1 node, embedded RocksDB — no external database needed)
+#
+#  Ports (host):
+#    ${NESSIE_PORT:-19120}   Nessie API + Iceberg REST endpoint
+#
+#  Iceberg REST base URI (from within Docker network):
+#    http://nessie:19120/iceberg
+# ─────────────────────────────────────────────────────────────────
+
+services:
+  nessie:
+    image: ${NESSIE_IMAGE:-ghcr.io/projectnessie/nessie:0.99.0}
+    container_name: ing-lakehouse-nessie
+    env_file:
+      - ../../.env
+    environment:
+      QUARKUS_HTTP_PORT: "19120"
+      QUARKUS_MANAGEMENT_PORT: "9001"
+    ports:
+      - "${NESSIE_PORT:-19120}:19120"
+    volumes:
+      - nessie-sn-data:/nessie/data
+      # Quarkus always reads /deployments/config/application.properties —
+      # avoids env var naming ambiguity for complex nested properties
+      - ./config/application.properties:/deployments/config/application.properties:ro
+    networks:
+      - lakehouse-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9001/q/health/live || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  nessie-sn-data:
+    name: ing-lakehouse_nessie-sn-data
+
+# lakehouse-net is defined in the root docker-compose.local.yml and inherited via include:

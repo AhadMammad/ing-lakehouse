@@ -14,6 +14,8 @@ include:
   - services/rustfs/docker-compose.singlenode.yml
   - services/spark/docker-compose.singlenode.yml
   - services/kafka/docker-compose.singlenode.yml
+  - services/nessie/docker-compose.singlenode.yml
+  - services/jupyter/docker-compose.singlenode.yml
 
 networks:
   # Shared network — every service attaches to this so cross-service
