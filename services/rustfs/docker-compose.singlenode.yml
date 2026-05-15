@@ -14,9 +14,6 @@
 services:
   rustfs:
     image: ${RUSTFS_IMAGE:-rustfs/rustfs:latest-glibc}
-    container_name: ing-lakehouse-rustfs
-    env_file:
-      - ../../.env
     environment:
       RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
       RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin123}
@@ -42,6 +39,5 @@ services:
 
 volumes:
   rustfs-sn-data:
-    name: ing-lakehouse_rustfs-sn-data
 
 # lakehouse-net is defined in the root docker-compose.local.yml and inherited via include:

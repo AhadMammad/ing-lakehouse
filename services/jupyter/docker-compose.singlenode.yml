@@ -19,10 +19,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ing-lakehouse-jupyter:latest
-    container_name: ing-lakehouse-jupyter
-    env_file:
-      - ../../.env
+    image: ${COMPOSE_PROJECT_NAME:-ing-lakehouse}-jupyter:latest
     environment:
       JUPYTER_TOKEN: ${JUPYTER_TOKEN:-lakehouse}
       # Nessie Iceberg REST catalog endpoint (inside Docker network)

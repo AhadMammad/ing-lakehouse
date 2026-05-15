@@ -14,9 +14,6 @@
 services:
   nessie:
     image: ${NESSIE_IMAGE:-ghcr.io/projectnessie/nessie:0.99.0}
-    container_name: ing-lakehouse-nessie
-    env_file:
-      - ../../.env
     environment:
       QUARKUS_HTTP_PORT: "19120"
       QUARKUS_MANAGEMENT_PORT: "9001"
@@ -39,6 +36,5 @@ services:
 
 volumes:
   nessie-sn-data:
-    name: ing-lakehouse_nessie-sn-data
 
 # lakehouse-net is defined in the root docker-compose.local.yml and inherited via include:

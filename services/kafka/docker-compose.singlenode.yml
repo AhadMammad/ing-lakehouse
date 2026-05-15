@@ -13,9 +13,6 @@
 services:
   kafka:
     image: ${KAFKA_IMAGE:-apache/kafka:3.7.0}
-    container_name: ing-lakehouse-kafka
-    env_file:
-      - ../../.env
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -46,6 +43,5 @@ services:
 
 volumes:
   kafka-sn-data:
-    name: ing-lakehouse_kafka-sn-data
 
 # lakehouse-net is defined in the root docker-compose.local.yml and inherited via include:

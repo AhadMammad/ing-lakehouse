@@ -13,7 +13,6 @@
 services:
   nginx:
     image: nginx:1.27-alpine
-    container_name: ing-lakehouse-nginx
     volumes:
       - ./config/nginx.singlenode.conf:/etc/nginx/conf.d/lakehouse.conf:ro
       - ../../certs/rustfs.pem:/etc/nginx/certs/lakehouse.pem:ro
