@@ -1,25 +1,25 @@
 name: ing-lakehouse
 
 # ─────────────────────────────────────────────────────────────────
-#  Local development mode — single-node, plain HTTP (no NGINX/SSL).
-#  RustFS: 1 node (ports exposed directly)  |  Spark: master only
-#  Kafka: 1 broker (KRaft)
+#  SSL mode — single-node with shared NGINX SSL proxy.
+#  RustFS: 1 node (no host ports)  |  Spark: master only
+#  Kafka: 1 broker (KRaft)         |  NGINX: TLS for all UIs
 #
-#  Use:  make up          Start plain HTTP stack (default)
-#        make down        Stop local stack
-#        make up-ssl      Start with shared NGINX SSL proxy
-#        make up-dist     Start distributed cluster for demos
+#  Requires:  make setup-certs  (run once to generate certs/)
+#
+#  Use:  make up-ssl      Start SSL stack
+#        make down-ssl    Stop SSL stack
+#        make up          Start plain HTTP stack (no NGINX)
 # ─────────────────────────────────────────────────────────────────
 
 include:
-  - services/rustfs/docker-compose.singlenode.yml
+  - services/rustfs/docker-compose.singlenode.ssl.yml
   - services/spark/docker-compose.singlenode.yml
   - services/kafka/docker-compose.singlenode.yml
   - services/nessie/docker-compose.singlenode.yml
   - services/jupyter/docker-compose.singlenode.yml
+  - services/nginx/docker-compose.singlenode.yml
 
 networks:
-  # Shared network — every service attaches to this so cross-service
-  # communication works without additional configuration.
   lakehouse-net:
     driver: bridge

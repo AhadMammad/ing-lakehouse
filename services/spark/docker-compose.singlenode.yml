@@ -12,10 +12,7 @@
 services:
   spark-master:
     image: ${SPARK_IMAGE:-apache/spark:3.5.3}
-    container_name: ing-lakehouse-spark
     user: root
-    env_file:
-      - ../../.env
     command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
     environment:
       SPARK_MASTER_HOST: spark-master
@@ -38,6 +35,5 @@ services:
 
 volumes:
   spark-sn-work:
-    name: ing-lakehouse_spark-sn-work
 
 # lakehouse-net is defined in the root docker-compose.local.yml and inherited via include:

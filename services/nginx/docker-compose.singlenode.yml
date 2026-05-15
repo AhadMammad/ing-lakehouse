@@ -1,0 +1,38 @@
+# ─────────────────────────────────────────────────────────────────
+#  Shared NGINX SSL proxy — single-node mode
+#
+#  Terminates TLS for all lakehouse UIs and APIs.
+#  Only included via docker-compose.local.ssl.yml (make up-ssl).
+#
+#  To add a new service (e.g. Kafka UI, Airflow):
+#    1. Add a server block in config/nginx.singlenode.conf
+#    2. Expose the port below
+#    3. Re-run: make up-ssl
+# ─────────────────────────────────────────────────────────────────
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./config/nginx.singlenode.conf:/etc/nginx/conf.d/lakehouse.conf:ro
+      - ../../certs/rustfs.pem:/etc/nginx/certs/lakehouse.pem:ro
+      - ../../certs/rustfs-key.pem:/etc/nginx/certs/lakehouse-key.pem:ro
+    ports:
+      - "${RUSTFS_S3_PORT:-9000}:9000"      # RustFS S3 API
+      - "${RUSTFS_CONSOLE_PORT:-9001}:9001"  # RustFS console
+      - "${SPARK_MASTER_UI_PORT:-8080}:8080" # Spark master UI
+      - "${JUPYTER_PORT:-8888}:8888"         # JupyterLab
+      - "${NESSIE_PORT:-19120}:19120"        # Nessie / Iceberg REST
+    networks:
+      - lakehouse-net
+    depends_on:
+      rustfs:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf --insecure https://localhost:9000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+# lakehouse-net is defined in the root docker-compose.local.ssl.yml and inherited via include:
