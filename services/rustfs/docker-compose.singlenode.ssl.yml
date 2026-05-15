@@ -1,14 +1,8 @@
 # ─────────────────────────────────────────────────────────────────
-#  RustFS — single-node mode (local development, plain HTTP)
+#  RustFS — single-node, SSL mode (no host ports — NGINX owns them)
 #
-#  Topology:
-#    rustfs  (1 node, ports exposed directly — no NGINX/SSL)
-#
-#  Ports (host):
-#    ${RUSTFS_S3_PORT:-9000}      S3 API  (HTTP)
-#    ${RUSTFS_CONSOLE_PORT:-9001} Web console (HTTP, no cert needed)
-#
-#  For SSL mode use docker-compose.local.ssl.yml instead.
+#  Included via docker-compose.local.ssl.yml.
+#  The shared NGINX proxy (services/nginx/) exposes ports 9000/9001.
 # ─────────────────────────────────────────────────────────────────
 
 services:
@@ -25,9 +19,6 @@ services:
       RUSTFS_CONSOLE_ADDRESS: "0.0.0.0:9001"
       RUSTFS_CONSOLE_PORT: "9001"
       RUSTFS_OBS_LOGGER_LEVEL: ${RUSTFS_LOG_LEVEL:-info}
-    ports:
-      - "${RUSTFS_S3_PORT:-9000}:9000"
-      - "${RUSTFS_CONSOLE_PORT:-9001}:9001"
     volumes:
       - rustfs-sn-data:/data
     networks:
@@ -44,4 +35,4 @@ volumes:
   rustfs-sn-data:
     name: ing-lakehouse_rustfs-sn-data
 
-# lakehouse-net is defined in the root docker-compose.local.yml and inherited via include:
+# lakehouse-net is defined in the root docker-compose.local.ssl.yml and inherited via include:

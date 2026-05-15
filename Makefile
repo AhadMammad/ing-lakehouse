@@ -16,6 +16,7 @@ RESET  := \033[0m
 
 # ── Compose file selectors ─────────────────────────────────────────
 COMPOSE_LOCAL := docker compose -f docker-compose.local.yml
+COMPOSE_SSL   := docker compose -f docker-compose.local.ssl.yml
 COMPOSE_DIST  := docker compose -f docker-compose.yml
 
 # ── Service / node lists ───────────────────────────────────────────
@@ -37,12 +38,14 @@ ICEBERG_WAREHOUSE_BUCKET := $(or $(ICEBERG_WAREHOUSE_BUCKET),iceberg-warehouse)
 
 .DEFAULT_GOAL := help
 .PHONY: help \
-        up up-dist down down-dist restart restart-dist pull pull-dist clean clean-dist \
+        up up-ssl up-dist down down-ssl down-dist restart restart-ssl restart-dist \
+        pull pull-dist clean clean-ssl clean-dist \
         status status-dist ps \
         logs logs-dist logs-rustfs logs-rustfs-dist logs-spark logs-spark-dist \
-        logs-kafka logs-kafka-dist logs-nessie logs-jupyter logs-node \
-        health health-dist console console-dist network \
+        logs-kafka logs-kafka-dist logs-nessie logs-jupyter logs-nginx logs-node \
+        health health-dist console console-ssl console-dist network \
         nessie-init-bucket \
+        jupyter-rebuild reset-events-table reset-nessie \
         setup-certs
 
 # ── Help ───────────────────────────────────────────────────────────
@@ -50,12 +53,17 @@ help:
 	@printf "\n$(BOLD)$(CYAN)╔══════════════════════════════════════════════════════╗$(RESET)\n"
 	@printf "$(BOLD)$(CYAN)║          ing-lakehouse  —  make targets              ║$(RESET)\n"
 	@printf "$(BOLD)$(CYAN)╚══════════════════════════════════════════════════════╝$(RESET)\n\n"
-	@printf "$(BOLD)  Local (single-node) — default for development$(RESET)\n"
-	@printf "  $(GREEN)up$(RESET)               $(DIM)Start all services in single-node mode$(RESET)\n"
+	@printf "$(BOLD)  Local plain HTTP (single-node) — default for development$(RESET)\n"
+	@printf "  $(GREEN)up$(RESET)               $(DIM)Start all services in single-node mode (plain HTTP, no cert)$(RESET)\n"
 	@printf "  $(RED)down$(RESET)             $(DIM)Stop local services (keeps volumes)$(RESET)\n"
 	@printf "  $(YELLOW)restart$(RESET)          $(DIM)Restart local services$(RESET)\n"
 	@printf "  $(YELLOW)pull$(RESET)             $(DIM)Pull latest images for local mode$(RESET)\n"
 	@printf "  $(RED)clean$(RESET)            $(DIM)Stop local services AND delete volumes  ⚠ destructive$(RESET)\n"
+	@printf "\n$(BOLD)  Local SSL (single-node + shared NGINX proxy)$(RESET)\n"
+	@printf "  $(GREEN)up-ssl$(RESET)           $(DIM)Start with NGINX SSL proxy (run setup-certs first)$(RESET)\n"
+	@printf "  $(RED)down-ssl$(RESET)         $(DIM)Stop SSL stack (keeps volumes)$(RESET)\n"
+	@printf "  $(YELLOW)restart-ssl$(RESET)      $(DIM)Restart SSL stack$(RESET)\n"
+	@printf "  $(RED)clean-ssl$(RESET)        $(DIM)Stop SSL stack AND delete volumes  ⚠ destructive$(RESET)\n"
 	@printf "\n$(BOLD)  Distributed — full cluster for demos$(RESET)\n"
 	@printf "  $(GREEN)up-dist$(RESET)          $(DIM)Start all services in distributed mode$(RESET)\n"
 	@printf "  $(RED)down-dist$(RESET)        $(DIM)Stop distributed services (keeps volumes)$(RESET)\n"
@@ -75,25 +83,30 @@ help:
 	@printf "  $(BLUE)logs-kafka-dist$(RESET)  $(DIM)Kafka broker logs (distributed)$(RESET)\n"
 	@printf "  $(BLUE)logs-nessie$(RESET)      $(DIM)Nessie catalog logs (local)$(RESET)\n"
 	@printf "  $(BLUE)logs-jupyter$(RESET)     $(DIM)Jupyter notebook server logs (local)$(RESET)\n"
+	@printf "  $(BLUE)logs-nginx$(RESET)       $(DIM)NGINX proxy logs (SSL mode)$(RESET)\n"
 	@printf "  $(BLUE)logs-node$(RESET)        $(DIM)Logs for one container  (NODE=kafka-2)$(RESET)\n"
 	@printf "  $(GREEN)health$(RESET)           $(DIM)Health check all local services$(RESET)\n"
 	@printf "  $(GREEN)health-dist$(RESET)      $(DIM)Health check all distributed services$(RESET)\n"
 	@printf "  $(CYAN)network$(RESET)          $(DIM)List containers on lakehouse-net$(RESET)\n"
 	@printf "\n$(BOLD)  Access$(RESET)\n"
-	@printf "  $(CYAN)console$(RESET)          $(DIM)Print local endpoints and credentials$(RESET)\n"
+	@printf "  $(CYAN)console$(RESET)          $(DIM)Print local endpoints and credentials (plain HTTP)$(RESET)\n"
+	@printf "  $(CYAN)console-ssl$(RESET)      $(DIM)Print SSL endpoints and credentials$(RESET)\n"
 	@printf "  $(CYAN)console-dist$(RESET)     $(DIM)Print distributed endpoints and credentials$(RESET)\n"
-	@printf "  $(CYAN)setup-certs$(RESET)      $(DIM)Generate SSL certs for RustFS (requires mkcert)$(RESET)\n"
-	@printf "\n$(BOLD)  Iceberg$(RESET)\n"
-	@printf "  $(CYAN)nessie-init-bucket$(RESET)  $(DIM)Create Iceberg warehouse bucket in RustFS (run once after make up)$(RESET)\n"
+	@printf "  $(CYAN)setup-certs$(RESET)      $(DIM)Generate SSL certs for NGINX proxy (requires mkcert)$(RESET)\n"
+	@printf "\n$(BOLD)  Iceberg / Curriculum$(RESET)\n"
+	@printf "  $(CYAN)nessie-init-bucket$(RESET)   $(DIM)Create Iceberg warehouse bucket in RustFS (run once after make up)$(RESET)\n"
+	@printf "  $(CYAN)jupyter-rebuild$(RESET)      $(DIM)Rebuild Jupyter image after Dockerfile changes$(RESET)\n"
+	@printf "  $(CYAN)reset-events-table$(RESET)   $(DIM)Drop demo.events + prune S3 prefix — replay 01–10 cleanly$(RESET)\n"
+	@printf "  $(RED)reset-nessie$(RESET)         $(DIM)Wipe Nessie state (volume) and re-init bucket  ⚠ destructive$(RESET)\n"
 	@printf "\n$(DIM)  Variables: NODE=<container-name> (default: rustfs)$(RESET)\n\n"
 
 # ── Lifecycle: local ───────────────────────────────────────────────
 up:
-	@printf "$(BOLD)$(GREEN)▶  Starting ing-lakehouse (local)...$(RESET)\n"
+	@printf "$(BOLD)$(GREEN)▶  Starting ing-lakehouse (local, plain HTTP)...$(RESET)\n"
 	@$(COMPOSE_LOCAL) up -d --build --remove-orphans
 	@printf "$(GREEN)✔  Local services started.$(RESET)\n"
-	@printf "$(DIM)   RustFS S3    → https://$(RUSTFS_HOST):$(S3_PORT)$(RESET)\n"
-	@printf "$(DIM)   RustFS UI    → https://$(RUSTFS_HOST):$(CONSOLE_PORT)$(RESET)\n"
+	@printf "$(DIM)   RustFS S3    → http://localhost:$(S3_PORT)$(RESET)\n"
+	@printf "$(DIM)   RustFS UI    → http://localhost:$(CONSOLE_PORT)$(RESET)\n"
 	@printf "$(DIM)   Spark UI     → http://localhost:$(SPARK_UI)$(RESET)\n"
 	@printf "$(DIM)   Kafka        → localhost:$(KAFKA_PORT)$(RESET)\n"
 	@printf "$(DIM)   Nessie       → http://localhost:$(NESSIE_PORT_VAR)$(RESET)\n"
@@ -120,6 +133,35 @@ clean:
 	@sleep 5
 	@$(COMPOSE_LOCAL) down -v --remove-orphans
 	@printf "$(RED)✔  Local volumes deleted.$(RESET)\n"
+
+# ── Lifecycle: SSL (local + NGINX proxy) ──────────────────────────
+up-ssl:
+	@printf "$(BOLD)$(GREEN)▶  Starting ing-lakehouse (SSL)...$(RESET)\n"
+	@$(COMPOSE_SSL) up -d --build --remove-orphans
+	@printf "$(GREEN)✔  SSL services started.$(RESET)\n"
+	@printf "$(DIM)   RustFS S3    → https://$(RUSTFS_HOST):$(S3_PORT)$(RESET)\n"
+	@printf "$(DIM)   RustFS UI    → https://$(RUSTFS_HOST):$(CONSOLE_PORT)$(RESET)\n"
+	@printf "$(DIM)   Spark UI     → https://localhost:$(SPARK_UI)$(RESET)\n"
+	@printf "$(DIM)   Kafka        → localhost:$(KAFKA_PORT)$(RESET)\n"
+	@printf "$(DIM)   Nessie       → https://localhost:$(NESSIE_PORT_VAR)$(RESET)\n"
+	@printf "$(DIM)   Jupyter      → https://localhost:$(JUPYTER_PORT_VAR)?token=$(JUPYTER_TOKEN)$(RESET)\n"
+
+down-ssl:
+	@printf "$(BOLD)$(RED)▶  Stopping ing-lakehouse (SSL)...$(RESET)\n"
+	@$(COMPOSE_SSL) down
+	@printf "$(RED)✔  SSL services stopped.$(RESET)\n"
+
+restart-ssl:
+	@printf "$(BOLD)$(YELLOW)▶  Restarting ing-lakehouse (SSL)...$(RESET)\n"
+	@$(COMPOSE_SSL) restart
+	@printf "$(YELLOW)✔  SSL services restarted.$(RESET)\n"
+
+clean-ssl:
+	@printf "$(BOLD)$(RED)⚠  WARNING: This will destroy all SSL stack data volumes!$(RESET)\n"
+	@printf "$(RED)   Press Ctrl-C within 5s to abort...$(RESET)\n"
+	@sleep 5
+	@$(COMPOSE_SSL) down -v --remove-orphans
+	@printf "$(RED)✔  SSL volumes deleted.$(RESET)\n"
 
 # ── Lifecycle: distributed ─────────────────────────────────────────
 up-dist:
@@ -164,7 +206,7 @@ logs:
 
 logs-rustfs:
 	@printf "$(BOLD)$(BLUE)▶  Streaming RustFS logs (local, Ctrl-C to exit)...$(RESET)\n"
-	@$(COMPOSE_LOCAL) logs -f --tail=100 rustfs rustfs-nginx
+	@$(COMPOSE_LOCAL) logs -f --tail=100 rustfs
 
 logs-spark:
 	@printf "$(BOLD)$(BLUE)▶  Streaming Spark master logs (local, Ctrl-C to exit)...$(RESET)\n"
@@ -181,6 +223,10 @@ logs-nessie:
 logs-jupyter:
 	@printf "$(BOLD)$(BLUE)▶  Streaming Jupyter logs (local, Ctrl-C to exit)...$(RESET)\n"
 	@$(COMPOSE_LOCAL) logs -f --tail=100 jupyter
+
+logs-nginx:
+	@printf "$(BOLD)$(BLUE)▶  Streaming NGINX proxy logs (SSL mode, Ctrl-C to exit)...$(RESET)\n"
+	@$(COMPOSE_SSL) logs -f --tail=100 nginx
 
 # ── Observability: distributed ─────────────────────────────────────
 status-dist:
@@ -267,16 +313,30 @@ network:
 # ── Access / console ───────────────────────────────────────────────
 console:
 	@printf "\n$(BOLD)$(CYAN)╔══════════════════════════════════════════╗$(RESET)\n"
-	@printf "$(BOLD)$(CYAN)║     ing-lakehouse — Local Endpoints      ║$(RESET)\n"
+	@printf "$(BOLD)$(CYAN)║   ing-lakehouse — Local Endpoints (HTTP) ║$(RESET)\n"
 	@printf "$(BOLD)$(CYAN)╚══════════════════════════════════════════╝$(RESET)\n\n"
-	@printf "  $(BOLD)RustFS S3$(RESET)    https://$(RUSTFS_HOST):$(S3_PORT)\n"
-	@printf "  $(BOLD)RustFS UI$(RESET)    https://$(RUSTFS_HOST):$(CONSOLE_PORT)\n"
+	@printf "  $(BOLD)RustFS S3$(RESET)    http://localhost:$(S3_PORT)\n"
+	@printf "  $(BOLD)RustFS UI$(RESET)    http://localhost:$(CONSOLE_PORT)\n"
 	@printf "  $(BOLD)User$(RESET)         $(RUSTFS_ACCESS_KEY)\n"
 	@printf "  $(BOLD)Password$(RESET)     $(RUSTFS_SECRET_KEY)\n\n"
 	@printf "  $(BOLD)Spark UI$(RESET)     http://localhost:$(SPARK_UI)\n"
 	@printf "  $(BOLD)Kafka$(RESET)        localhost:$(KAFKA_PORT)\n\n"
 	@printf "  $(BOLD)Nessie$(RESET)       http://localhost:$(NESSIE_PORT_VAR)\n"
 	@printf "  $(BOLD)Jupyter$(RESET)      http://localhost:$(JUPYTER_PORT_VAR)?token=$(JUPYTER_TOKEN)\n\n"
+	@printf "  $(DIM)aws s3 --endpoint-url http://localhost:$(S3_PORT) ls$(RESET)\n\n"
+
+console-ssl:
+	@printf "\n$(BOLD)$(CYAN)╔══════════════════════════════════════════╗$(RESET)\n"
+	@printf "$(BOLD)$(CYAN)║   ing-lakehouse — SSL Endpoints (HTTPS)  ║$(RESET)\n"
+	@printf "$(BOLD)$(CYAN)╚══════════════════════════════════════════╝$(RESET)\n\n"
+	@printf "  $(BOLD)RustFS S3$(RESET)    https://$(RUSTFS_HOST):$(S3_PORT)\n"
+	@printf "  $(BOLD)RustFS UI$(RESET)    https://$(RUSTFS_HOST):$(CONSOLE_PORT)\n"
+	@printf "  $(BOLD)User$(RESET)         $(RUSTFS_ACCESS_KEY)\n"
+	@printf "  $(BOLD)Password$(RESET)     $(RUSTFS_SECRET_KEY)\n\n"
+	@printf "  $(BOLD)Spark UI$(RESET)     https://localhost:$(SPARK_UI)\n"
+	@printf "  $(BOLD)Kafka$(RESET)        localhost:$(KAFKA_PORT)\n\n"
+	@printf "  $(BOLD)Nessie$(RESET)       https://localhost:$(NESSIE_PORT_VAR)\n"
+	@printf "  $(BOLD)Jupyter$(RESET)      https://localhost:$(JUPYTER_PORT_VAR)?token=$(JUPYTER_TOKEN)\n\n"
 	@printf "  $(DIM)aws s3 --endpoint-url https://$(RUSTFS_HOST):$(S3_PORT) ls$(RESET)\n\n"
 
 console-dist:
@@ -316,6 +376,40 @@ nessie-init-bucket:
 		--bucket $(ICEBERG_WAREHOUSE_BUCKET) \
 		--endpoint-url http://rustfs:9000
 	@printf "$(GREEN)✔  Bucket '$(ICEBERG_WAREHOUSE_BUCKET)' is ready.$(RESET)\n"
+
+# ── Notebook curriculum helpers ────────────────────────────────────
+jupyter-rebuild:
+	@printf "$(BOLD)$(CYAN)▶  Rebuilding Jupyter image...$(RESET)\n"
+	@$(COMPOSE_LOCAL) build jupyter
+	@$(COMPOSE_LOCAL) up -d jupyter
+	@printf "$(GREEN)✔  Jupyter rebuilt and restarted.$(RESET)\n"
+	@printf "$(DIM)   Tip: PySpark is a 317 MB download. If it times out, just rerun — layers above it are cached.$(RESET)\n"
+
+reset-events-table:
+	@printf "$(BOLD)$(YELLOW)▶  Dropping demo.events and pruning warehouse prefix...$(RESET)\n"
+	@docker exec -i ing-lakehouse-jupyter python < scripts/reset_events_table.py
+	@docker run --rm \
+		--network ing-lakehouse_lakehouse-net \
+		-e AWS_ACCESS_KEY_ID=$(RUSTFS_ACCESS_KEY) \
+		-e AWS_SECRET_ACCESS_KEY=$(RUSTFS_SECRET_KEY) \
+		-e AWS_DEFAULT_REGION=us-east-1 \
+		amazon/aws-cli:latest \
+		s3 rm s3://$(ICEBERG_WAREHOUSE_BUCKET)/warehouse/demo/ \
+		--recursive \
+		--endpoint-url http://rustfs:9000 2>/dev/null || true
+	@printf "$(GREEN)✔  demo.events reset. Re-run notebook 00 then 01.$(RESET)\n"
+
+reset-nessie:
+	@printf "$(BOLD)$(RED)⚠  Wiping all Nessie state — every catalog ref, branch, and tag will be lost.$(RESET)\n"
+	@printf "$(RED)   Press Ctrl-C within 5s to abort...$(RESET)\n"
+	@sleep 5
+	@$(COMPOSE_LOCAL) rm -sf nessie
+	@docker volume rm ing-lakehouse_nessie-sn-data 2>/dev/null || true
+	@$(COMPOSE_LOCAL) up -d nessie
+	@printf "$(YELLOW)   Waiting for Nessie health...$(RESET)\n"
+	@sleep 10
+	@$(MAKE) nessie-init-bucket
+	@printf "$(GREEN)✔  Nessie reset complete.$(RESET)\n"
 
 # ── SSL setup ──────────────────────────────────────────────────────
 setup-certs:
