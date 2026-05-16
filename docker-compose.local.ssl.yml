@@ -23,3 +23,6 @@ include:
 networks:
   lakehouse-net:
     driver: bridge
+    ipam:
+      config:
+        - subnet: ${NETWORK_SUBNET:-10.100.0.0/24}

@@ -1,0 +1,46 @@
+# ─────────────────────────────────────────────────────────────────
+#  Trino — Distributed SQL query engine (single-node coordinator)
+#
+#  Topology:
+#    trino  (1 coordinator, no separate workers — include-coordinator=true)
+#
+#  Ports (host):
+#    ${TRINO_PORT:-8081}   Trino Web UI + JDBC/HTTP query endpoint
+#                          (8081 avoids conflict with Spark UI on 8080)
+#
+#  Catalogs:
+#    nessie  →  Iceberg REST catalog via Nessie + RustFS S3
+#
+#  Query from host:
+#    http://localhost:8081
+# ─────────────────────────────────────────────────────────────────
+
+services:
+  trino:
+    image: ${TRINO_IMAGE:-trinodb/trino:469}
+    environment:
+      # Passed through for ${ENV:VAR} substitution in catalog/nessie.properties
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin123}
+    ports:
+      - "${TRINO_PORT:-8081}:8080"
+    volumes:
+      - ./config/config.properties:/etc/trino/config.properties:ro
+      - ./config/jvm.config:/etc/trino/jvm.config:ro
+      - ./config/log.properties:/etc/trino/log.properties:ro
+      - ./config/node.properties:/etc/trino/node.properties:ro
+      - ./config/catalog/nessie.properties:/etc/trino/catalog/nessie.properties:ro
+    networks:
+      - lakehouse-net
+    depends_on:
+      nessie:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/v1/status || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+# lakehouse-net is defined in the root docker-compose.local.yml and inherited via include:

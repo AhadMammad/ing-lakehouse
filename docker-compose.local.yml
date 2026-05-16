@@ -17,9 +17,16 @@ include:
   - services/kafka/docker-compose.singlenode.yml
   - services/nessie/docker-compose.singlenode.yml
   - services/jupyter/docker-compose.singlenode.yml
+  - services/trino/docker-compose.singlenode.yml
+  - services/cloudbeaver/docker-compose.singlenode.yml
 
 networks:
   # Shared network — every service attaches to this so cross-service
   # communication works without additional configuration.
+  # Explicit subnet prevents Docker from exhausting its default pool on
+  # shared VMs with multiple instances.  Set via NETWORK_SUBNET in .env.
   lakehouse-net:
     driver: bridge
+    ipam:
+      config:
+        - subnet: ${NETWORK_SUBNET:-10.100.0.0/24}

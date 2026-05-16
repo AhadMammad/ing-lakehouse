@@ -51,6 +51,8 @@ RUSTFS_HOST  := $(or $(RUSTFS_DOMAIN),rustfs.lakehouse.local)
 NESSIE_PORT_VAR          := $(or $(NESSIE_PORT),19120)
 JUPYTER_PORT_VAR         := $(or $(JUPYTER_PORT),8888)
 ICEBERG_WAREHOUSE_BUCKET := $(or $(ICEBERG_WAREHOUSE_BUCKET),iceberg-warehouse)
+TRINO_PORT_VAR           := $(or $(TRINO_PORT),8081)
+HUE_PORT_VAR             := $(or $(HUE_PORT),8000)
 
 .DEFAULT_GOAL := help
 .PHONY: help \
@@ -59,6 +61,7 @@ ICEBERG_WAREHOUSE_BUCKET := $(or $(ICEBERG_WAREHOUSE_BUCKET),iceberg-warehouse)
         status status-dist ps \
         logs logs-dist logs-rustfs logs-rustfs-dist logs-spark logs-spark-dist \
         logs-kafka logs-kafka-dist logs-nessie logs-jupyter logs-nginx logs-node \
+        logs-trino logs-hue \
         health health-dist console console-ssl console-dist network \
         nessie-init-bucket \
         jupyter-rebuild reset-events-table reset-nessie \
@@ -101,6 +104,8 @@ help:
 	@printf "  $(BLUE)logs-kafka-dist$(RESET)  $(DIM)Kafka broker logs (distributed)$(RESET)\n"
 	@printf "  $(BLUE)logs-nessie$(RESET)      $(DIM)Nessie catalog logs (local)$(RESET)\n"
 	@printf "  $(BLUE)logs-jupyter$(RESET)     $(DIM)Jupyter notebook server logs (local)$(RESET)\n"
+	@printf "  $(BLUE)logs-trino$(RESET)       $(DIM)Trino coordinator logs (local)$(RESET)\n"
+	@printf "  $(BLUE)logs-hue$(RESET)         $(DIM)Hue SQL interface logs (local)$(RESET)\n"
 	@printf "  $(BLUE)logs-nginx$(RESET)       $(DIM)NGINX proxy logs (SSL mode)$(RESET)\n"
 	@printf "  $(BLUE)logs-node$(RESET)        $(DIM)Logs for one container  (NODE=kafka-2)$(RESET)\n"
 	@printf "  $(GREEN)health$(RESET)           $(DIM)Health check all local services$(RESET)\n"
@@ -135,6 +140,10 @@ init-instance:
 	KAF=$$(echo "$$PORTS"  | awk '{print $$5}'); \
 	NES=$$(echo "$$PORTS"  | awk '{print $$6}'); \
 	JUP=$$(echo "$$PORTS"  | awk '{print $$7}'); \
+	TRI=$$(echo "$$PORTS"  | awk '{print $$8}'); \
+	HUE=$$(echo "$$PORTS"  | awk '{print $$9}'); \
+	SUBNET_IDX=$$(( $$(id -u) % 253 + 1 )); \
+	SUBNET="10.100.$${SUBNET_IDX}.0/24"; \
 	{ printf "COMPOSE_PROJECT_NAME=ing-lakehouse-$$INSTANCE\n\n"; \
 	  grep -v "^COMPOSE_PROJECT_NAME" .env; } > "$$ENV_FILE"; \
 	sed -i "s|^RUSTFS_S3_PORT=.*|RUSTFS_S3_PORT=$$S3|" "$$ENV_FILE"; \
@@ -144,13 +153,19 @@ init-instance:
 	sed -i "s|^KAFKA_BROKER_PORT=.*|KAFKA_BROKER_PORT=$$KAF|" "$$ENV_FILE"; \
 	sed -i "s|^NESSIE_PORT=.*|NESSIE_PORT=$$NES|" "$$ENV_FILE"; \
 	sed -i "s|^JUPYTER_PORT=.*|JUPYTER_PORT=$$JUP|" "$$ENV_FILE"; \
+	sed -i "s|^TRINO_PORT=.*|TRINO_PORT=$$TRI|" "$$ENV_FILE"; \
+	sed -i "s|^HUE_PORT=.*|HUE_PORT=$$HUE|" "$$ENV_FILE"; \
+	sed -i "s|^NETWORK_SUBNET=.*|NETWORK_SUBNET=$$SUBNET|" "$$ENV_FILE"; \
 	printf "$(GREEN)✔  Created $$ENV_FILE$(RESET)\n"; \
 	printf "$(DIM)   Project    → ing-lakehouse-$$INSTANCE$(RESET)\n"; \
+	printf "$(DIM)   Network    → $$SUBNET$(RESET)\n"; \
 	printf "$(DIM)   RustFS S3  → :$$S3    Console → :$$CON$(RESET)\n"; \
 	printf "$(DIM)   Spark UI   → :$$SPUI  Master  → :$$SPMAS$(RESET)\n"; \
 	printf "$(DIM)   Kafka      → :$$KAF$(RESET)\n"; \
 	printf "$(DIM)   Nessie     → :$$NES$(RESET)\n"; \
 	printf "$(DIM)   Jupyter    → :$$JUP$(RESET)\n"; \
+	printf "$(DIM)   Trino UI   → :$$TRI$(RESET)\n"; \
+	printf "$(DIM)   Hue        → :$$HUE$(RESET)\n"; \
 	printf "\n$(DIM)   Next: make up$(RESET)\n"
 
 # ── Lifecycle: local ───────────────────────────────────────────────
@@ -164,6 +179,8 @@ up:
 	@printf "$(DIM)   Kafka        → localhost:$(KAFKA_PORT)$(RESET)\n"
 	@printf "$(DIM)   Nessie       → http://localhost:$(NESSIE_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   Jupyter      → http://localhost:$(JUPYTER_PORT_VAR)?token=$(JUPYTER_TOKEN)$(RESET)\n"
+	@printf "$(DIM)   Trino UI     → http://localhost:$(TRINO_PORT_VAR)$(RESET)\n"
+	@printf "$(DIM)   CloudBeaver  → http://localhost:$(HUE_PORT_VAR)$(RESET)\n"
 
 down:
 	@printf "$(BOLD)$(RED)▶  Stopping ing-lakehouse (local) [instance: $(INSTANCE)]...$(RESET)\n"
@@ -198,6 +215,8 @@ up-ssl:
 	@printf "$(DIM)   Kafka        → localhost:$(KAFKA_PORT)$(RESET)\n"
 	@printf "$(DIM)   Nessie       → https://localhost:$(NESSIE_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   Jupyter      → https://localhost:$(JUPYTER_PORT_VAR)?token=$(JUPYTER_TOKEN)$(RESET)\n"
+	@printf "$(DIM)   Trino UI     → https://localhost:$(TRINO_PORT_VAR)$(RESET)\n"
+	@printf "$(DIM)   Hue          → https://localhost:$(HUE_PORT_VAR)$(RESET)\n"
 
 down-ssl:
 	@printf "$(BOLD)$(RED)▶  Stopping ing-lakehouse (SSL) [instance: $(INSTANCE)]...$(RESET)\n"
@@ -277,6 +296,14 @@ logs-jupyter:
 	@printf "$(BOLD)$(BLUE)▶  Streaming Jupyter logs (local, Ctrl-C to exit)...$(RESET)\n"
 	@$(COMPOSE_LOCAL) logs -f --tail=100 jupyter
 
+logs-trino:
+	@printf "$(BOLD)$(BLUE)▶  Streaming Trino logs (local, Ctrl-C to exit)...$(RESET)\n"
+	@$(COMPOSE_LOCAL) logs -f --tail=100 trino
+
+logs-hue:
+	@printf "$(BOLD)$(BLUE)▶  Streaming CloudBeaver logs (local, Ctrl-C to exit)...$(RESET)\n"
+	@$(COMPOSE_LOCAL) logs -f --tail=100 cloudbeaver
+
 logs-nginx:
 	@printf "$(BOLD)$(BLUE)▶  Streaming NGINX proxy logs (SSL mode, Ctrl-C to exit)...$(RESET)\n"
 	@$(COMPOSE_SSL) logs -f --tail=100 nginx
@@ -309,7 +336,7 @@ logs-node:
 # ── Health checks ──────────────────────────────────────────────────
 health:
 	@printf "$(BOLD)$(GREEN)▶  Checking local service health [instance: $(INSTANCE)]...$(RESET)\n\n"
-	@for svc in rustfs spark-master kafka nessie jupyter; do \
+	@for svc in rustfs spark-master kafka nessie jupyter trino cloudbeaver; do \
 		container="$(PROJECT_NAME)-$$svc-1"; \
 		printf "  $(CYAN)$$container$(RESET)  "; \
 		status=$$(docker inspect --format='{{.State.Health.Status}}' "$$container" 2>/dev/null || echo "not found"); \
@@ -381,6 +408,8 @@ console:
 	@printf "  $(BOLD)Kafka$(RESET)        localhost:$(KAFKA_PORT)\n\n"
 	@printf "  $(BOLD)Nessie$(RESET)       http://localhost:$(NESSIE_PORT_VAR)\n"
 	@printf "  $(BOLD)Jupyter$(RESET)      http://localhost:$(JUPYTER_PORT_VAR)?token=$(JUPYTER_TOKEN)\n\n"
+	@printf "  $(BOLD)Trino UI$(RESET)     http://localhost:$(TRINO_PORT_VAR)\n"
+	@printf "  $(BOLD)CloudBeaver$(RESET)  http://localhost:$(HUE_PORT_VAR)  (create admin on first launch)\n\n"
 	@printf "  $(DIM)aws s3 --endpoint-url http://localhost:$(S3_PORT) ls$(RESET)\n\n"
 
 console-ssl:
@@ -396,6 +425,8 @@ console-ssl:
 	@printf "  $(BOLD)Kafka$(RESET)        localhost:$(KAFKA_PORT)\n\n"
 	@printf "  $(BOLD)Nessie$(RESET)       https://localhost:$(NESSIE_PORT_VAR)\n"
 	@printf "  $(BOLD)Jupyter$(RESET)      https://localhost:$(JUPYTER_PORT_VAR)?token=$(JUPYTER_TOKEN)\n\n"
+	@printf "  $(BOLD)Trino UI$(RESET)     https://localhost:$(TRINO_PORT_VAR)\n"
+	@printf "  $(BOLD)CloudBeaver$(RESET)  https://localhost:$(HUE_PORT_VAR)  (create admin on first launch)\n\n"
 	@printf "  $(DIM)aws s3 --endpoint-url https://$(RUSTFS_HOST):$(S3_PORT) ls$(RESET)\n\n"
 
 console-dist:

@@ -1,0 +1,43 @@
+# ─────────────────────────────────────────────────────────────────
+#  CloudBeaver — Web SQL interface for Trino (single-node)
+#
+#  Multi-arch image (linux/amd64 + linux/arm64) — no QEMU needed.
+#
+#  Topology:
+#    cloudbeaver  (1 container, web-based database IDE)
+#
+#  Ports (host):
+#    ${HUE_PORT:-8000}   CloudBeaver web UI
+#
+#  Access:
+#    http://localhost:8000
+#    First launch: browser prompts to create admin account.
+#
+#  Trino connection (configure once in UI):
+#    Driver: Trino   Host: trino   Port: 8080   Catalog: nessie
+# ─────────────────────────────────────────────────────────────────
+
+services:
+  cloudbeaver:
+    image: ${CLOUDBEAVER_IMAGE:-dbeaver/cloudbeaver:latest}
+    ports:
+      - "${HUE_PORT:-8000}:8978"
+    volumes:
+      - cloudbeaver-sn-data:/opt/cloudbeaver/workspace
+    networks:
+      - lakehouse-net
+    depends_on:
+      trino:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8978/ -o /dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  cloudbeaver-sn-data:
+
+# lakehouse-net is defined in the root docker-compose.local.yml and inherited via include:

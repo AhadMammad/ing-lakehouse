@@ -1,6 +1,6 @@
 """
-Find 7 free host ports for a new ing-lakehouse instance.
-Outputs a space-separated list: S3 Console SparkUI SparkMaster Kafka Nessie Jupyter
+Find 9 free host ports for a new ing-lakehouse instance.
+Outputs a space-separated list: S3 Console SparkUI SparkMaster Kafka Nessie Jupyter Trino Hue
 """
 import socket
 
@@ -23,6 +23,6 @@ def find_free_port(base, used):
         p += 1
 
 used = set()
-bases = [9000, 9011, 8080, 7077, 9092, 19120, 8888]
+bases = [9000, 9011, 8080, 7077, 9092, 19120, 8888, 8081, 8000]
 ports = [find_free_port(b, used) for b in bases]
 print(' '.join(map(str, ports)))
