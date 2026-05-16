@@ -23,6 +23,8 @@ services:
       - "${SPARK_MASTER_UI_PORT:-8080}:8080" # Spark master UI
       - "${JUPYTER_PORT:-8888}:8888"         # JupyterLab
       - "${NESSIE_PORT:-19120}:19120"        # Nessie / Iceberg REST
+      - "${TRINO_PORT:-8081}:8081"           # Trino UI
+      - "${HUE_PORT:-8000}:8000"             # Hue SQL interface
     networks:
       - lakehouse-net
     depends_on:

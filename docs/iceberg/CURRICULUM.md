@@ -29,6 +29,7 @@ To replay from scratch: `make reset-events-table` (or `make reset-nessie` for a 
 | 08 | [`08_nessie_catalog_refs.ipynb`](../../notebooks/08_nessie_catalog_refs.ipynb) | Catalog-level Git-style versioning — Nessie commits, branches, tags, diff, past-hash reads via `{NESSIE_URI}/main@{hash}` |
 | 09 | [`09_snapshot_management.ipynb`](../../notebooks/09_snapshot_management.ipynb) | Rollback via Nessie branch reassignment (`PUT /trees/main@{hash}`); explains why Iceberg-level `rollback`/`expire_snapshots` don't apply here |
 | 10 | [`10_spark_maintenance.ipynb`](../../notebooks/10_spark_maintenance.ipynb) | Spark stored procedures: `rewrite_data_files`, `rewrite_manifests`, `remove_orphan_files` (dry run) — with Nessie-GC caveats |
+| 11 | [`11_compaction_demo.ipynb`](../../notebooks/11_compaction_demo.ipynb) | End-to-end compaction demo on `demo.transactions`: 48 micro-batch appends → delete → `rewrite_data_files` → `rewrite_manifests` — 90% file reduction with before/after metrics |
 
 ## Dependency DAG
 
