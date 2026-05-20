@@ -18,6 +18,7 @@ include:
   - services/kafka/docker-compose.singlenode.yml
   - services/nessie/docker-compose.singlenode.yml
   - services/jupyter/docker-compose.singlenode.yml
+  - services/airflow/docker-compose.yml
   - services/nginx/docker-compose.singlenode.yml
 
 networks:

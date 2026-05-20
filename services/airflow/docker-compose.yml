@@ -1,0 +1,218 @@
+# ─────────────────────────────────────────────────────────────────
+#  Apache Airflow 3.2.1 — CeleryExecutor (2 workers)
+#
+#  Topology:
+#    airflow-postgres      →  metadata DB (PostgreSQL 16, internal)
+#    airflow-redis         →  Celery broker (Redis 7, internal)
+#    airflow-init          →  one-shot: db migrate + admin user creation
+#    airflow-apiserver     →  Web UI + REST API
+#    airflow-scheduler     →  DAG scheduling
+#    airflow-dag-processor →  DAG file parsing (Airflow 3.x component)
+#    airflow-triggerer     →  deferrable operators
+#    airflow-worker-1      →  Celery worker
+#    airflow-worker-2      →  Celery worker
+#
+#  Ports (host):
+#    ${AIRFLOW_PORT:-8082}   Airflow Web UI / REST API
+#
+#  Pre-wired lakehouse connections (available in DAGs):
+#    spark_default   →  spark://spark-master:7077
+#    trino_default   →  trino://trino:8080/
+#    aws_default     →  http://rustfs:9000  (S3-compatible RustFS)
+# ─────────────────────────────────────────────────────────────────
+
+x-airflow-common:
+  &airflow-common
+  image: ${AIRFLOW_IMAGE:-ing-lakehouse/airflow:3.2.1}
+  build:
+    context: .
+    dockerfile: Dockerfile
+    args:
+      AIRFLOW_VERSION: "3.2.1"
+      PYTHON_VERSION: "3.13"
+  env_file:
+    - ../../.env
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+    # 3.x Task Execution API: workers default to http://localhost:8080 which
+    # fails across containers. Point them at the in-network apiserver. Without
+    # this, task subprocesses die before writing any log.
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: "http://airflow-apiserver:8080/execution/"
+    # Shared JWT signing secret for the Task Execution API. Without an explicit
+    # value every container generates its own, scheduler-signed tokens fail
+    # signature verification at the apiserver, and tasks die with
+    # "Invalid auth token: Signature verification failed" before any log is
+    # written. Sourced from .env so secret rotation is one-file. Set a non-empty
+    # default so a fresh dev clone works without editing .env.
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-dev-jwt-secret-not-for-prod}
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+    AIRFLOW__CELERY__BROKER_URL: redis://airflow-redis:6379/0
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@airflow-postgres/airflow
+    # Lower than the default of 16 — this host shares CPU with Spark, Trino,
+    # and RustFS. 16 × 2 workers oversubscribes. See docs/airflow/executors.md.
+    AIRFLOW__CELERY__WORKER_CONCURRENCY: "4"
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-}
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    # Pre-wire connections to existing lakehouse services so DAGs can
+    # reference conn_id="spark_default", "trino_default", "aws_default"
+    AIRFLOW_CONN_SPARK_DEFAULT: spark://spark-master:7077
+    # Trino requires X-Trino-User on every request even when auth is off;
+    # encode it as the login portion of the URI.
+    AIRFLOW_CONN_TRINO_DEFAULT: trino://airflow@trino:8080/
+    AIRFLOW_CONN_AWS_DEFAULT: "aws://?endpoint_url=http%3A%2F%2Frustfs%3A9000&region_name=us-east-1&aws_access_key_id=${RUSTFS_ACCESS_KEY:-rustfsadmin}&aws_secret_access_key=${RUSTFS_SECRET_KEY:-rustfsadmin123}"
+  volumes:
+    - ./dags:/opt/airflow/dags:ro
+    - airflow-logs:/opt/airflow/logs
+  networks:
+    - lakehouse-net
+  restart: unless-stopped
+  depends_on:
+    airflow-postgres:
+      condition: service_healthy
+    airflow-redis:
+      condition: service_healthy
+    airflow-init:
+      condition: service_completed_successfully
+
+services:
+
+  # ── Infrastructure ──────────────────────────────────────────────
+
+  airflow-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow-postgres:/var/lib/postgresql/data
+    networks:
+      - lakehouse-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  airflow-redis:
+    image: redis:7-alpine
+    networks:
+      - lakehouse-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Init (runs once, then exits) ────────────────────────────────
+
+  airflow-init:
+    <<: *airflow-common
+    # Use the image's own entrypoint so it handles db migrate + user creation
+    # via _AIRFLOW_DB_MIGRATE / _AIRFLOW_WWW_USER_CREATE env vars — avoids the
+    # broken `airflow users create` CLI path in Airflow 3.x (AirflowSecurityManagerV2
+    # missing find_role).
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - exec /entrypoint airflow version
+    restart: "no"
+    # Override depends_on — init must not wait on itself
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+      airflow-redis:
+        condition: service_healthy
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USER:-admin}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-airflow}
+
+  # ── Core Airflow components ─────────────────────────────────────
+
+  airflow-apiserver:
+    <<: *airflow-common
+    command: airflow api-server
+    ports:
+      - "${AIRFLOW_PORT:-8082}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/v2/version || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: airflow scheduler
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8974/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    command: airflow dag-processor
+
+  airflow-triggerer:
+    <<: *airflow-common
+    command: airflow triggerer
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type TriggererJob --hostname \"$$(hostname)\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ── Celery workers ──────────────────────────────────────────────
+
+  airflow-worker-1:
+    <<: *airflow-common
+    command: airflow celery worker
+    environment:
+      <<: *airflow-common-env
+      DUMB_INIT_SETSID: "0"
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - 'celery --app airflow.providers.celery.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  airflow-worker-2:
+    <<: *airflow-common
+    command: airflow celery worker
+    environment:
+      <<: *airflow-common-env
+      DUMB_INIT_SETSID: "0"
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - 'celery --app airflow.providers.celery.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  airflow-postgres:
+  airflow-logs:
+
+# lakehouse-net is defined in the root compose file and inherited via include:
+# Container names and volume names are intentionally NOT pinned — compose
+# auto-prefixes them with the project name so multi-instance setups
+# (ing-lakehouse-<user>) don't collide and `make clean` removes them.
