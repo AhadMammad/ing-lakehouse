@@ -15,7 +15,7 @@ A modular, service-per-directory data lakehouse platform built for data engineer
 | Spark | 🔜 Planned | Distributed query engine | — |
 | Trino | 🔜 Planned | Interactive SQL on the lakehouse | — |
 | Kafka | 🔜 Planned | Streaming ingest layer | — |
-| Airflow | 🔜 Planned | Workflow orchestration | — |
+| **Airflow 3.2.1** | ✅ Active | Workflow orchestration (CeleryExecutor, 2 workers) | [architecture](airflow/architecture.md) · [executors](airflow/executors.md) · [DAGs](airflow/dags.md) · [operators](airflow/operators-tasks.md) · [dependencies](airflow/dependencies.md) · [XComs](airflow/xcoms.md) · [connections](airflow/connections.md) |
 
 ---
 
@@ -52,6 +52,7 @@ make down
 | `9001` | RustFS Web Console — nginx LB, round-robins across all 4 nodes | HTTP |
 | `19120` | Nessie Iceberg REST Catalog + Versioning API | HTTP |
 | `8888` | JupyterLab | HTTP |
+| `8082` | Airflow Web UI + REST API (`/api/v2/`) | HTTP |
 
 RustFS ports are served by `rustfs-nginx`. No node is a single point of failure for either the data plane or the UI.
 

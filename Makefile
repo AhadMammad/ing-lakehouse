@@ -53,6 +53,7 @@ JUPYTER_PORT_VAR         := $(or $(JUPYTER_PORT),8888)
 ICEBERG_WAREHOUSE_BUCKET := $(or $(ICEBERG_WAREHOUSE_BUCKET),iceberg-warehouse)
 TRINO_PORT_VAR           := $(or $(TRINO_PORT),8081)
 HUE_PORT_VAR             := $(or $(HUE_PORT),8000)
+AIRFLOW_PORT_VAR         := $(or $(AIRFLOW_PORT),8082)
 
 .DEFAULT_GOAL := help
 .PHONY: help \
@@ -61,7 +62,7 @@ HUE_PORT_VAR             := $(or $(HUE_PORT),8000)
         status status-dist ps \
         logs logs-dist logs-rustfs logs-rustfs-dist logs-spark logs-spark-dist \
         logs-kafka logs-kafka-dist logs-nessie logs-jupyter logs-nginx logs-node \
-        logs-trino logs-hue \
+        logs-trino logs-hue logs-airflow \
         health health-dist console console-ssl console-dist network \
         nessie-init-bucket \
         jupyter-rebuild reset-events-table reset-nessie \
@@ -106,6 +107,7 @@ help:
 	@printf "  $(BLUE)logs-jupyter$(RESET)     $(DIM)Jupyter notebook server logs (local)$(RESET)\n"
 	@printf "  $(BLUE)logs-trino$(RESET)       $(DIM)Trino coordinator logs (local)$(RESET)\n"
 	@printf "  $(BLUE)logs-hue$(RESET)         $(DIM)Hue SQL interface logs (local)$(RESET)\n"
+	@printf "  $(BLUE)logs-airflow$(RESET)     $(DIM)Airflow component logs (local)$(RESET)\n"
 	@printf "  $(BLUE)logs-nginx$(RESET)       $(DIM)NGINX proxy logs (SSL mode)$(RESET)\n"
 	@printf "  $(BLUE)logs-node$(RESET)        $(DIM)Logs for one container  (NODE=kafka-2)$(RESET)\n"
 	@printf "  $(GREEN)health$(RESET)           $(DIM)Health check all local services$(RESET)\n"
@@ -116,6 +118,7 @@ help:
 	@printf "  $(CYAN)console-ssl$(RESET)      $(DIM)Print SSL endpoints and credentials$(RESET)\n"
 	@printf "  $(CYAN)console-dist$(RESET)     $(DIM)Print distributed endpoints and credentials$(RESET)\n"
 	@printf "  $(CYAN)setup-certs$(RESET)      $(DIM)Generate SSL certs for NGINX proxy (requires mkcert)$(RESET)\n"
+	@printf "  $(CYAN)Airflow UI$(RESET)       $(DIM)http://localhost:$(AIRFLOW_PORT_VAR)  (admin / airflow)$(RESET)\n"
 	@printf "\n$(BOLD)  Iceberg / Curriculum$(RESET)\n"
 	@printf "  $(CYAN)nessie-init-bucket$(RESET)   $(DIM)Create Iceberg warehouse bucket in RustFS (run once after make up)$(RESET)\n"
 	@printf "  $(CYAN)jupyter-rebuild$(RESET)      $(DIM)Rebuild Jupyter image after Dockerfile changes$(RESET)\n"
@@ -142,6 +145,7 @@ init-instance:
 	JUP=$$(echo "$$PORTS"  | awk '{print $$7}'); \
 	TRI=$$(echo "$$PORTS"  | awk '{print $$8}'); \
 	HUE=$$(echo "$$PORTS"  | awk '{print $$9}'); \
+	AIR=$$(echo "$$PORTS"  | awk '{print $$10}'); \
 	SUBNET_IDX=$$(( $$(id -u) % 253 + 1 )); \
 	SUBNET="10.100.$${SUBNET_IDX}.0/24"; \
 	{ printf "COMPOSE_PROJECT_NAME=ing-lakehouse-$$INSTANCE\n\n"; \
@@ -155,6 +159,7 @@ init-instance:
 	sed -i "s|^JUPYTER_PORT=.*|JUPYTER_PORT=$$JUP|" "$$ENV_FILE"; \
 	sed -i "s|^TRINO_PORT=.*|TRINO_PORT=$$TRI|" "$$ENV_FILE"; \
 	sed -i "s|^HUE_PORT=.*|HUE_PORT=$$HUE|" "$$ENV_FILE"; \
+	sed -i "s|^AIRFLOW_PORT=.*|AIRFLOW_PORT=$$AIR|" "$$ENV_FILE"; \
 	sed -i "s|^NETWORK_SUBNET=.*|NETWORK_SUBNET=$$SUBNET|" "$$ENV_FILE"; \
 	printf "$(GREEN)✔  Created $$ENV_FILE$(RESET)\n"; \
 	printf "$(DIM)   Project    → ing-lakehouse-$$INSTANCE$(RESET)\n"; \
@@ -166,6 +171,7 @@ init-instance:
 	printf "$(DIM)   Jupyter    → :$$JUP$(RESET)\n"; \
 	printf "$(DIM)   Trino UI   → :$$TRI$(RESET)\n"; \
 	printf "$(DIM)   Hue        → :$$HUE$(RESET)\n"; \
+	printf "$(DIM)   Airflow    → :$$AIR$(RESET)\n"; \
 	printf "\n$(DIM)   Next: make up$(RESET)\n"
 
 # ── Lifecycle: local ───────────────────────────────────────────────
@@ -181,6 +187,7 @@ up:
 	@printf "$(DIM)   Jupyter      → http://localhost:$(JUPYTER_PORT_VAR)?token=$(JUPYTER_TOKEN)$(RESET)\n"
 	@printf "$(DIM)   Trino UI     → http://localhost:$(TRINO_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   CloudBeaver  → http://localhost:$(HUE_PORT_VAR)$(RESET)\n"
+	@printf "$(DIM)   Airflow UI   → http://localhost:$(AIRFLOW_PORT_VAR)$(RESET)\n"
 
 down:
 	@printf "$(BOLD)$(RED)▶  Stopping ing-lakehouse (local) [instance: $(INSTANCE)]...$(RESET)\n"
@@ -244,6 +251,7 @@ up-dist:
 	@printf "$(DIM)   RustFS UI    → https://$(RUSTFS_HOST):$(CONSOLE_PORT)$(RESET)\n"
 	@printf "$(DIM)   Spark UI     → http://localhost:$(SPARK_UI)$(RESET)\n"
 	@printf "$(DIM)   Kafka        → localhost:$(KAFKA_PORT),localhost:$(KAFKA_BROKER2_PORT),localhost:$(KAFKA_BROKER3_PORT)$(RESET)\n"
+	@printf "$(DIM)   Airflow UI   → http://localhost:$(AIRFLOW_PORT_VAR)  (CeleryExecutor + 2 workers)$(RESET)\n"
 
 down-dist:
 	@printf "$(BOLD)$(RED)▶  Stopping ing-lakehouse (distributed) [instance: $(INSTANCE)]...$(RESET)\n"
@@ -304,6 +312,10 @@ logs-hue:
 	@printf "$(BOLD)$(BLUE)▶  Streaming CloudBeaver logs (local, Ctrl-C to exit)...$(RESET)\n"
 	@$(COMPOSE_LOCAL) logs -f --tail=100 cloudbeaver
 
+logs-airflow:
+	@printf "$(BOLD)$(BLUE)▶  Streaming Airflow logs (local, Ctrl-C to exit)...$(RESET)\n"
+	@$(COMPOSE_LOCAL) logs -f --tail=100 airflow-apiserver airflow-scheduler airflow-dag-processor airflow-triggerer airflow-worker-1 airflow-worker-2
+
 logs-nginx:
 	@printf "$(BOLD)$(BLUE)▶  Streaming NGINX proxy logs (SSL mode, Ctrl-C to exit)...$(RESET)\n"
 	@$(COMPOSE_SSL) logs -f --tail=100 nginx
@@ -336,7 +348,7 @@ logs-node:
 # ── Health checks ──────────────────────────────────────────────────
 health:
 	@printf "$(BOLD)$(GREEN)▶  Checking local service health [instance: $(INSTANCE)]...$(RESET)\n\n"
-	@for svc in rustfs spark-master kafka nessie jupyter trino cloudbeaver; do \
+	@for svc in rustfs spark-master kafka nessie jupyter trino cloudbeaver airflow-apiserver; do \
 		container="$(PROJECT_NAME)-$$svc-1"; \
 		printf "  $(CYAN)$$container$(RESET)  "; \
 		status=$$(docker inspect --format='{{.State.Health.Status}}' "$$container" 2>/dev/null || echo "not found"); \
@@ -409,7 +421,8 @@ console:
 	@printf "  $(BOLD)Nessie$(RESET)       http://localhost:$(NESSIE_PORT_VAR)\n"
 	@printf "  $(BOLD)Jupyter$(RESET)      http://localhost:$(JUPYTER_PORT_VAR)?token=$(JUPYTER_TOKEN)\n\n"
 	@printf "  $(BOLD)Trino UI$(RESET)     http://localhost:$(TRINO_PORT_VAR)\n"
-	@printf "  $(BOLD)CloudBeaver$(RESET)  http://localhost:$(HUE_PORT_VAR)  (create admin on first launch)\n\n"
+	@printf "  $(BOLD)CloudBeaver$(RESET)  http://localhost:$(HUE_PORT_VAR)  (create admin on first launch)\n"
+	@printf "  $(BOLD)Airflow UI$(RESET)   http://localhost:$(AIRFLOW_PORT_VAR)  ($(AIRFLOW_ADMIN_USER) / $(AIRFLOW_ADMIN_PASSWORD))\n\n"
 	@printf "  $(DIM)aws s3 --endpoint-url http://localhost:$(S3_PORT) ls$(RESET)\n\n"
 
 console-ssl:
@@ -444,6 +457,7 @@ console-dist:
 	@printf "    kafka-2  localhost:$(KAFKA_BROKER2_PORT)\n"
 	@printf "    kafka-3  localhost:$(KAFKA_BROKER3_PORT)\n\n"
 	@printf "  $(DIM)Bootstrap: localhost:$(KAFKA_PORT),localhost:$(KAFKA_BROKER2_PORT),localhost:$(KAFKA_BROKER3_PORT)$(RESET)\n\n"
+	@printf "  $(BOLD)Airflow UI$(RESET)   http://localhost:$(AIRFLOW_PORT_VAR)  (CeleryExecutor + 2 workers)\n\n"
 
 # ── Iceberg / Nessie ───────────────────────────────────────────────
 nessie-init-bucket:

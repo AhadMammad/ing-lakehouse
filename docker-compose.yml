@@ -18,8 +18,7 @@ include:
   - services/jupyter/docker-compose.singlenode.yml
   - services/trino/docker-compose.singlenode.yml
   - services/cloudbeaver/docker-compose.singlenode.yml
-  # ── future services ──────────────────────────────────────────
-  # - services/airflow/docker-compose.yml
+  - services/airflow/docker-compose.yml
 
 networks:
   # Shared network — every service attaches to this so cross-service
