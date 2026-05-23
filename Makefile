@@ -66,6 +66,7 @@ AIRFLOW_PORT_VAR         := $(or $(AIRFLOW_PORT),8082)
         health health-dist console console-ssl console-dist network \
         nessie-init-bucket \
         jupyter-rebuild reset-events-table reset-nessie \
+        build-etl-app logs-etl-app \
         setup-certs init-instance
 
 # ── Help ───────────────────────────────────────────────────────────
@@ -122,6 +123,7 @@ help:
 	@printf "\n$(BOLD)  Iceberg / Curriculum$(RESET)\n"
 	@printf "  $(CYAN)nessie-init-bucket$(RESET)   $(DIM)Create Iceberg warehouse bucket in RustFS (run once after make up)$(RESET)\n"
 	@printf "  $(CYAN)jupyter-rebuild$(RESET)      $(DIM)Rebuild Jupyter image after Dockerfile changes$(RESET)\n"
+	@printf "  $(CYAN)build-etl-app$(RESET)        $(DIM)Build the etl-app image used by the weather DAG$(RESET)\n"
 	@printf "  $(CYAN)reset-events-table$(RESET)   $(DIM)Drop demo.events + prune S3 prefix — replay 01–10 cleanly$(RESET)\n"
 	@printf "  $(RED)reset-nessie$(RESET)         $(DIM)Wipe Nessie state (volume) and re-init bucket  ⚠ destructive$(RESET)\n"
 	@printf "\n$(DIM)  Variables: INSTANCE=<name> (default: current user)  NODE=<container-name>$(RESET)\n\n"
@@ -316,6 +318,10 @@ logs-airflow:
 	@printf "$(BOLD)$(BLUE)▶  Streaming Airflow logs (local, Ctrl-C to exit)...$(RESET)\n"
 	@$(COMPOSE_LOCAL) logs -f --tail=100 airflow-apiserver airflow-scheduler airflow-dag-processor airflow-triggerer airflow-worker-1 airflow-worker-2
 
+logs-etl-app:
+	@printf "$(BOLD)$(BLUE)▶  Streaming etl-app build logs (Ctrl-C to exit)...$(RESET)\n"
+	@$(COMPOSE_LOCAL) --profile build-only logs -f --tail=100 etl-app || true
+
 logs-nginx:
 	@printf "$(BOLD)$(BLUE)▶  Streaming NGINX proxy logs (SSL mode, Ctrl-C to exit)...$(RESET)\n"
 	@$(COMPOSE_SSL) logs -f --tail=100 nginx
@@ -503,6 +509,13 @@ reset-events-table:
 		--recursive \
 		--endpoint-url http://rustfs:9000 2>/dev/null || true
 	@printf "$(GREEN)✔  demo.events reset. Re-run notebook 00 then 01.$(RESET)\n"
+
+# ── ETL-app build ──────────────────────────────────────────────────
+build-etl-app:
+	@printf "$(BOLD)$(CYAN)▶  Building etl-app image [instance: $(INSTANCE)]...$(RESET)\n"
+	@$(COMPOSE_LOCAL) --profile build-only build etl-app
+	@printf "$(GREEN)✔  Built $(PROJECT_NAME)-etl-app:latest$(RESET)\n"
+	@printf "$(DIM)   Trigger the DAG: http://localhost:$(AIRFLOW_PORT_VAR) → weather_etl_baku$(RESET)\n"
 
 reset-nessie:
 	@printf "$(BOLD)$(RED)⚠  Wiping all Nessie state for instance '$(INSTANCE)' — every catalog ref, branch, and tag will be lost.$(RESET)\n"

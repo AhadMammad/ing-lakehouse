@@ -14,6 +14,7 @@ ARG PYTHON_VERSION=3.13
 RUN pip install --no-cache-dir \
       "apache-airflow-providers-apache-spark" \
       "apache-airflow-providers-trino" \
+      "apache-airflow-providers-docker" \
       --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt"
 
 # SparkSubmitOperator requires `spark-submit` on PATH and a JRE. This image
