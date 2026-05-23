@@ -1,9 +1,9 @@
-"""Daily Baku weather ETL: Open-Meteo → bronze → silver → gold Iceberg tables.
+"""Daily CoinGecko crypto ETL: top-20 markets → bronze/silver/gold Iceberg tables.
 
-Each task spawns an ephemeral container from the etl-app image (built per
-instance via `make build-etl-app`) and joins this instance's lakehouse
-network. Image tag and network name come from worker env so multi-instance
-deployments (one per Unix user via `make init-instance`) stay isolated.
+Mirrors the weather DAG: three sequential DockerOperator tasks spawn
+ephemeral containers from the etl-app image (built per-instance via
+`make build-etl-app`) and join the per-instance lakehouse network. Image
+tag and network name are read from worker env at parse time.
 """
 from __future__ import annotations
 
@@ -13,16 +13,13 @@ from datetime import datetime
 from airflow.providers.docker.operators.docker import DockerOperator
 from airflow.sdk import DAG
 
-# Resolved per-instance by Compose substitution into the worker's env
-# (see services/airflow/docker-compose.yml x-airflow-common.environment).
 ETL_IMAGE = os.environ["ETL_APP_IMAGE"]
 NETWORK = os.environ["LAKEHOUSE_NETWORK"]
 
 COMMON = dict(
     image=ETL_IMAGE,
     network_mode=NETWORK,
-    auto_remove="success",  # keep failed containers around for debug
-    # DOCKER_HOST is injected by the worker env (points at docker-socket-proxy).
+    auto_remove="success",
     docker_url=os.environ.get("DOCKER_HOST", "unix://var/run/docker.sock"),
     mount_tmp_dir=False,
     environment={
@@ -35,27 +32,27 @@ COMMON = dict(
 )
 
 with DAG(
-    dag_id="weather_etl_baku",
-    schedule="0 6 * * *",  # daily 06:00 UTC — after Open-Meteo refresh
+    dag_id="crypto_etl_top20",
+    schedule="0 2 * * *",  # daily 02:00 UTC — staggered from weather (06:00 UTC)
     start_date=datetime(2026, 5, 1),
     catchup=False,
     max_active_runs=1,
-    tags=["weather", "lakehouse", "medallion"],
-    description="Open-Meteo Baku → bronze/silver/gold Iceberg tables",
+    tags=["crypto", "lakehouse", "medallion"],
+    description="CoinGecko top-20 → bronze/silver/gold Iceberg tables",
 ) as dag:
     bronze = DockerOperator(
         task_id="bronze",
-        command="etl_app.jobs.weather_bronze --date {{ ds }}",
+        command="etl_app.jobs.crypto_bronze --date {{ ds }}",
         **COMMON,
     )
     silver = DockerOperator(
         task_id="silver",
-        command="etl_app.jobs.weather_silver --date {{ ds }}",
+        command="etl_app.jobs.crypto_silver --date {{ ds }}",
         **COMMON,
     )
     gold = DockerOperator(
         task_id="gold",
-        command="etl_app.jobs.weather_gold --date {{ ds }}",
+        command="etl_app.jobs.crypto_gold --date {{ ds }}",
         **COMMON,
     )
 

@@ -14,7 +14,7 @@ from pyiceberg.expressions import And, GreaterThanOrEqual, LessThan
 from pyiceberg.io.pyarrow import schema_to_pyarrow
 
 from etl_app.catalog import ensure_namespace, get_catalog
-from etl_app.schemas import (
+from etl_app.sources.weather.schemas import (
     BRONZE_TABLE,
     SILVER_NS,
     SILVER_PARTITION,
@@ -57,7 +57,7 @@ def main(date: str) -> None:
 
     df = pl.from_arrow(bronze_rows)
     if df.is_empty():
-        print(f"[silver] no bronze rows for {date}")
+        print(f"[weather_silver] no bronze rows for {date}")
         return
 
     # Keep latest ingest per (city, observation_ts); then drop ingest_ts.
@@ -73,7 +73,7 @@ def main(date: str) -> None:
     result = silver.upsert(arrow, join_cols=["city", "observation_ts"])
     silver.refresh()
     print(
-        f"[silver] {date}: inserted={result.rows_inserted} "
+        f"[weather_silver] {date}: inserted={result.rows_inserted} "
         f"updated={result.rows_updated} snapshots={len(silver.history())}"
     )
 

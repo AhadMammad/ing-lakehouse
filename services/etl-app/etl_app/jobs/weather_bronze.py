@@ -11,12 +11,16 @@ import datetime as dt
 import json
 
 import polars as pl
-from pyiceberg.exceptions import NoSuchTableError
 from pyiceberg.io.pyarrow import schema_to_pyarrow
 
 from etl_app.catalog import ensure_namespace, get_catalog
-from etl_app.open_meteo import CITY_NAME, BAKU_LAT, BAKU_LON, fetch_baku_hourly
-from etl_app.schemas import (
+from etl_app.sources.weather.client import (
+    BAKU_LAT,
+    BAKU_LON,
+    CITY_NAME,
+    fetch_baku_hourly,
+)
+from etl_app.sources.weather.schemas import (
     BRONZE_NS,
     BRONZE_PARTITION,
     BRONZE_SCHEMA,
@@ -70,7 +74,7 @@ def main(date: str) -> None:
     payload = fetch_baku_hourly(date)
     rows = _flatten(payload, ingest_ts)
     if not rows:
-        print(f"[bronze] no rows returned for {date}")
+        print(f"[weather_bronze] no rows returned for {date}")
         return
 
     df = pl.DataFrame(rows)
@@ -79,7 +83,7 @@ def main(date: str) -> None:
     arrow = df.to_arrow().cast(schema_to_pyarrow(BRONZE_SCHEMA))
     table.append(arrow)
     table.refresh()
-    print(f"[bronze] appended {len(rows)} rows for {date}; snapshots={len(table.history())}")
+    print(f"[weather_bronze] appended {len(rows)} rows for {date}; snapshots={len(table.history())}")
 
 
 if __name__ == "__main__":

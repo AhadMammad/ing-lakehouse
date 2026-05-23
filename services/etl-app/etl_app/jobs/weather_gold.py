@@ -13,8 +13,8 @@ from pyiceberg.expressions import And, EqualTo, GreaterThanOrEqual, LessThan
 from pyiceberg.io.pyarrow import schema_to_pyarrow
 
 from etl_app.catalog import ensure_namespace, get_catalog
-from etl_app.open_meteo import CITY_NAME
-from etl_app.schemas import (
+from etl_app.sources.weather.client import CITY_NAME
+from etl_app.sources.weather.schemas import (
     GOLD_NS,
     GOLD_PARTITION,
     GOLD_SCHEMA,
@@ -57,7 +57,7 @@ def main(date: str) -> None:
 
     df = pl.from_arrow(rows)
     if df.is_empty():
-        print(f"[gold] no silver rows for {date}")
+        print(f"[weather_gold] no silver rows for {date}")
         return
 
     agg = (
@@ -85,7 +85,7 @@ def main(date: str) -> None:
         overwrite_filter=And(EqualTo("city", CITY_NAME), EqualTo("day", day.isoformat())),
     )
     gold.refresh()
-    print(f"[gold] {date}: wrote {len(agg)} aggregate row(s); snapshots={len(gold.history())}")
+    print(f"[weather_gold] {date}: wrote {len(agg)} aggregate row(s); snapshots={len(gold.history())}")
 
 
 if __name__ == "__main__":
