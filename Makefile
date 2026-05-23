@@ -42,6 +42,13 @@ RUSTFS_DIST_NODES  := rustfs1 rustfs2 rustfs3 rustfs4
 KAFKA_DIST_BROKERS := kafka-1 kafka-2 kafka-3
 SPARK_WORKERS      := spark-worker-1 spark-worker-2
 
+# Services included in `up-batch` — excludes nginx, kafka, spark, hue.
+BATCH_SERVICES := rustfs nessie jupyter trino cloudbeaver \
+                  airflow-postgres airflow-redis airflow-init \
+                  airflow-apiserver airflow-scheduler airflow-dag-processor \
+                  airflow-triggerer airflow-worker-1 airflow-worker-2 \
+                  docker-socket-proxy
+
 # Derive display variables from whichever env file is active
 S3_PORT      := $(or $(RUSTFS_S3_PORT),9000)
 CONSOLE_PORT := $(or $(RUSTFS_CONSOLE_PORT),9001)
@@ -57,7 +64,7 @@ AIRFLOW_PORT_VAR         := $(or $(AIRFLOW_PORT),8082)
 
 .DEFAULT_GOAL := help
 .PHONY: help \
-        up up-ssl up-dist down down-ssl down-dist restart restart-ssl restart-dist \
+        up up-batch up-ssl up-dist down down-ssl down-dist restart restart-ssl restart-dist \
         pull pull-dist clean clean-ssl clean-dist \
         status status-dist ps \
         logs logs-dist logs-rustfs logs-rustfs-dist logs-spark logs-spark-dist \
@@ -78,6 +85,7 @@ help:
 	@printf "  $(CYAN)init-instance$(RESET)    $(DIM)Create .env.<INSTANCE> with auto-allocated ports (INSTANCE=alice)$(RESET)\n"
 	@printf "\n$(BOLD)  Local plain HTTP (single-node) — default for development$(RESET)\n"
 	@printf "  $(GREEN)up$(RESET)               $(DIM)Start all services in single-node mode (plain HTTP, no cert)$(RESET)\n"
+	@printf "  $(GREEN)up-batch$(RESET)         $(DIM)Start batch-only stack (skips spark, kafka, nginx, hue)$(RESET)\n"
 	@printf "  $(RED)down$(RESET)             $(DIM)Stop local services (keeps volumes)$(RESET)\n"
 	@printf "  $(YELLOW)restart$(RESET)          $(DIM)Restart local services$(RESET)\n"
 	@printf "  $(YELLOW)pull$(RESET)             $(DIM)Pull latest images for local mode$(RESET)\n"
@@ -190,6 +198,19 @@ up:
 	@printf "$(DIM)   Trino UI     → http://localhost:$(TRINO_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   CloudBeaver  → http://localhost:$(HUE_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   Airflow UI   → http://localhost:$(AIRFLOW_PORT_VAR)$(RESET)\n"
+
+up-batch:
+	@printf "$(BOLD)$(GREEN)▶  Starting ing-lakehouse (batch-only, no spark/kafka/nginx/hue) [instance: $(INSTANCE)]...$(RESET)\n"
+	@$(COMPOSE_LOCAL) up -d --build --remove-orphans $(BATCH_SERVICES)
+	@printf "$(GREEN)✔  Batch services started.$(RESET)\n"
+	@printf "$(DIM)   RustFS S3    → http://localhost:$(S3_PORT)$(RESET)\n"
+	@printf "$(DIM)   RustFS UI    → http://localhost:$(CONSOLE_PORT)$(RESET)\n"
+	@printf "$(DIM)   Nessie       → http://localhost:$(NESSIE_PORT_VAR)$(RESET)\n"
+	@printf "$(DIM)   Jupyter      → http://localhost:$(JUPYTER_PORT_VAR)?token=$(JUPYTER_TOKEN)$(RESET)\n"
+	@printf "$(DIM)   Trino UI     → http://localhost:$(TRINO_PORT_VAR)$(RESET)\n"
+	@printf "$(DIM)   CloudBeaver  → http://localhost:$(HUE_PORT_VAR)$(RESET)\n"
+	@printf "$(DIM)   Airflow UI   → http://localhost:$(AIRFLOW_PORT_VAR)$(RESET)\n"
+	@printf "$(DIM)   Stop with: make down$(RESET)\n"
 
 down:
 	@printf "$(BOLD)$(RED)▶  Stopping ing-lakehouse (local) [instance: $(INSTANCE)]...$(RESET)\n"
