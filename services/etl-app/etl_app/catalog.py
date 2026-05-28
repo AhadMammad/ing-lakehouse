@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pyiceberg.catalog.rest import RestCatalog
+from pyiceberg.exceptions import NamespaceAlreadyExistsError
 
 from etl_app.config import (
     NESSIE_URI,
@@ -28,5 +29,9 @@ def get_catalog() -> RestCatalog:
 
 
 def ensure_namespace(catalog: RestCatalog, namespace: str) -> None:
-    if (namespace,) not in catalog.list_namespaces():
+    # Create-and-swallow is race-safe; the list-then-create pattern TOCTOUs
+    # when parallel tasks (e.g. bronze TaskGroup) hit the catalog at once.
+    try:
         catalog.create_namespace(namespace)
+    except NamespaceAlreadyExistsError:
+        pass
