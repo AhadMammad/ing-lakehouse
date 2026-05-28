@@ -1,0 +1,21 @@
+# ─────────────────────────────────────────────────────────────────
+#  data-generator — build-only service.
+#
+#  Declared so `make build-data-generator` can produce a per-instance
+#  image ($(COMPOSE_PROJECT_NAME)-data-generator:latest) that Airflow's
+#  DockerOperator references. The `build-only` profile keeps it out of
+#  `make up` — containers are spawned on-demand by the DAG or via
+#  `make run-data-generator`, not as long-lived services.
+# ─────────────────────────────────────────────────────────────────
+
+services:
+  data-generator:
+    image: ${COMPOSE_PROJECT_NAME:-ing-lakehouse}-data-generator:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["build-only"]
+    networks:
+      - lakehouse-net
+
+# lakehouse-net is defined in the root docker-compose.local.yml and inherited via include:

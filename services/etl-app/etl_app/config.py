@@ -14,3 +14,16 @@ S3_KEY = os.environ["AWS_ACCESS_KEY_ID"]
 S3_SECRET = os.environ["AWS_SECRET_ACCESS_KEY"]
 WAREHOUSE_BUCKET = os.environ.get("ICEBERG_WAREHOUSE_BUCKET", "iceberg-warehouse")
 WAREHOUSE_URI = f"s3://{WAREHOUSE_BUCKET}/warehouse"
+
+
+def _pg_uri() -> str:
+    host = os.environ["PG_HOST"]
+    port = os.environ.get("PG_PORT", "5432")
+    db = os.environ["PG_DB"]
+    user = os.environ["PG_USER"]
+    pw = os.environ["PG_PASSWORD"]
+    return f"postgresql://{user}:{pw}@{host}:{port}/{db}"
+
+
+def get_postgres_uri() -> str:
+    return _pg_uri()

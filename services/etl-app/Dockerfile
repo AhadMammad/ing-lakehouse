@@ -18,7 +18,8 @@ WORKDIR /app
 RUN pip install --no-cache-dir \
       "pyiceberg[s3fs,pyarrow]==0.9.1" \
       "polars==1.9.0" \
-      "requests==2.32.3"
+      "requests==2.32.3" \
+      "connectorx==0.3.3"
 
 COPY etl_app /app/etl_app
 

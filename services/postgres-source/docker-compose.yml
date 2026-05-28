@@ -1,0 +1,38 @@
+# ─────────────────────────────────────────────────────────────────
+#  postgres-source — Payments platform monolith source database.
+#
+#  Simulates the PostgreSQL database owned by a monolith fintech app.
+#  Used as the source for batch ETL pipelines that read into the
+#  lakehouse medallion via Airflow DAGs.
+#
+#  Host port: ${POSTGRES_SOURCE_PORT:-5433}
+#  Container port (internal): 5432
+#  Reach from other containers as: postgres-source:5432
+# ─────────────────────────────────────────────────────────────────
+
+services:
+  postgres-source:
+    image: postgres:16-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-ing-lakehouse}-postgres-source
+    environment:
+      POSTGRES_DB: ${POSTGRES_SOURCE_DB:-payments}
+      POSTGRES_USER: ${POSTGRES_SOURCE_USER:-payments}
+      POSTGRES_PASSWORD: ${POSTGRES_SOURCE_PASSWORD:-payments123}
+    ports:
+      - "${POSTGRES_SOURCE_PORT:-5433}:5432"
+    volumes:
+      - postgres-source-data:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - lakehouse-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_SOURCE_USER:-payments} -d ${POSTGRES_SOURCE_DB:-payments}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres-source-data:
+
+# lakehouse-net is defined in the root docker-compose.local.yml and inherited via include:

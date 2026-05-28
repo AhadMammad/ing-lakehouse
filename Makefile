@@ -47,7 +47,7 @@ BATCH_SERVICES := rustfs nessie jupyter trino cloudbeaver \
                   airflow-postgres airflow-redis airflow-init \
                   airflow-apiserver airflow-scheduler airflow-dag-processor \
                   airflow-triggerer airflow-worker-1 airflow-worker-2 \
-                  docker-socket-proxy
+                  docker-socket-proxy postgres-source
 
 # Derive display variables from whichever env file is active
 S3_PORT      := $(or $(RUSTFS_S3_PORT),9000)
@@ -61,6 +61,12 @@ ICEBERG_WAREHOUSE_BUCKET := $(or $(ICEBERG_WAREHOUSE_BUCKET),iceberg-warehouse)
 TRINO_PORT_VAR           := $(or $(TRINO_PORT),8081)
 HUE_PORT_VAR             := $(or $(HUE_PORT),8000)
 AIRFLOW_PORT_VAR         := $(or $(AIRFLOW_PORT),8082)
+POSTGRES_SOURCE_PORT_VAR := $(or $(POSTGRES_SOURCE_PORT),5433)
+
+# Convenience vars for run-data-generator (overridable on command line)
+START ?= 2024-01-01
+END   ?= 2024-01-31
+ROWS  ?= 1000
 
 .DEFAULT_GOAL := help
 .PHONY: help \
@@ -74,6 +80,7 @@ AIRFLOW_PORT_VAR         := $(or $(AIRFLOW_PORT),8082)
         nessie-init-bucket \
         jupyter-rebuild reset-events-table reset-nessie \
         build-etl-app logs-etl-app \
+        build-data-generator run-data-generator logs-postgres-source \
         setup-certs init-instance
 
 # ── Help ───────────────────────────────────────────────────────────
@@ -131,10 +138,13 @@ help:
 	@printf "\n$(BOLD)  Iceberg / Curriculum$(RESET)\n"
 	@printf "  $(CYAN)nessie-init-bucket$(RESET)   $(DIM)Create Iceberg warehouse bucket in RustFS (run once after make up)$(RESET)\n"
 	@printf "  $(CYAN)jupyter-rebuild$(RESET)      $(DIM)Rebuild Jupyter image after Dockerfile changes$(RESET)\n"
-	@printf "  $(CYAN)build-etl-app$(RESET)        $(DIM)Build the etl-app image used by the weather DAG$(RESET)\n"
+	@printf "  $(CYAN)build-etl-app$(RESET)        $(DIM)Build the etl-app image used by the weather/crypto DAGs$(RESET)\n"
+	@printf "  $(CYAN)build-data-generator$(RESET) $(DIM)Build the data-generator image for payments seeder$(RESET)\n"
+	@printf "  $(CYAN)run-data-generator$(RESET)   $(DIM)Seed postgres-source  (START=YYYY-MM-DD END=YYYY-MM-DD ROWS=N)$(RESET)\n"
+	@printf "  $(CYAN)logs-postgres-source$(RESET) $(DIM)Stream postgres-source container logs$(RESET)\n"
 	@printf "  $(CYAN)reset-events-table$(RESET)   $(DIM)Drop demo.events + prune S3 prefix — replay 01–10 cleanly$(RESET)\n"
 	@printf "  $(RED)reset-nessie$(RESET)         $(DIM)Wipe Nessie state (volume) and re-init bucket  ⚠ destructive$(RESET)\n"
-	@printf "\n$(DIM)  Variables: INSTANCE=<name> (default: current user)  NODE=<container-name>$(RESET)\n\n"
+	@printf "\n$(DIM)  Variables: INSTANCE=<name> (default: current user)  NODE=<container-name>  START/END/ROWS (data-generator)$(RESET)\n\n"
 
 # ── Multi-instance init ────────────────────────────────────────────
 init-instance:
@@ -156,6 +166,7 @@ init-instance:
 	TRI=$$(echo "$$PORTS"  | awk '{print $$8}'); \
 	HUE=$$(echo "$$PORTS"  | awk '{print $$9}'); \
 	AIR=$$(echo "$$PORTS"  | awk '{print $$10}'); \
+	PG=$$(echo "$$PORTS"   | awk '{print $$11}'); \
 	SUBNET_IDX=$$(( $$(id -u) % 253 + 1 )); \
 	SUBNET="10.100.$${SUBNET_IDX}.0/24"; \
 	{ printf "COMPOSE_PROJECT_NAME=ing-lakehouse-$$INSTANCE\n\n"; \
@@ -170,6 +181,7 @@ init-instance:
 	sed -i "s|^TRINO_PORT=.*|TRINO_PORT=$$TRI|" "$$ENV_FILE"; \
 	sed -i "s|^HUE_PORT=.*|HUE_PORT=$$HUE|" "$$ENV_FILE"; \
 	sed -i "s|^AIRFLOW_PORT=.*|AIRFLOW_PORT=$$AIR|" "$$ENV_FILE"; \
+	sed -i "s|^POSTGRES_SOURCE_PORT=.*|POSTGRES_SOURCE_PORT=$$PG|" "$$ENV_FILE"; \
 	sed -i "s|^NETWORK_SUBNET=.*|NETWORK_SUBNET=$$SUBNET|" "$$ENV_FILE"; \
 	printf "$(GREEN)✔  Created $$ENV_FILE$(RESET)\n"; \
 	printf "$(DIM)   Project    → ing-lakehouse-$$INSTANCE$(RESET)\n"; \
@@ -182,6 +194,7 @@ init-instance:
 	printf "$(DIM)   Trino UI   → :$$TRI$(RESET)\n"; \
 	printf "$(DIM)   Hue        → :$$HUE$(RESET)\n"; \
 	printf "$(DIM)   Airflow    → :$$AIR$(RESET)\n"; \
+	printf "$(DIM)   PostgreSQL → :$$PG$(RESET)\n"; \
 	printf "\n$(DIM)   Next: make up$(RESET)\n"
 
 # ── Lifecycle: local ───────────────────────────────────────────────
@@ -198,6 +211,7 @@ up:
 	@printf "$(DIM)   Trino UI     → http://localhost:$(TRINO_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   CloudBeaver  → http://localhost:$(HUE_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   Airflow UI   → http://localhost:$(AIRFLOW_PORT_VAR)$(RESET)\n"
+	@printf "$(DIM)   PostgreSQL   → localhost:$(POSTGRES_SOURCE_PORT_VAR)  (payments / payments123)$(RESET)\n"
 
 up-batch:
 	@printf "$(BOLD)$(GREEN)▶  Starting ing-lakehouse (batch-only, no spark/kafka/nginx/hue) [instance: $(INSTANCE)]...$(RESET)\n"
@@ -210,6 +224,7 @@ up-batch:
 	@printf "$(DIM)   Trino UI     → http://localhost:$(TRINO_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   CloudBeaver  → http://localhost:$(HUE_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   Airflow UI   → http://localhost:$(AIRFLOW_PORT_VAR)$(RESET)\n"
+	@printf "$(DIM)   PostgreSQL   → localhost:$(POSTGRES_SOURCE_PORT_VAR)  (payments / payments123)$(RESET)\n"
 	@printf "$(DIM)   Stop with: make down$(RESET)\n"
 
 down:
@@ -375,7 +390,7 @@ logs-node:
 # ── Health checks ──────────────────────────────────────────────────
 health:
 	@printf "$(BOLD)$(GREEN)▶  Checking local service health [instance: $(INSTANCE)]...$(RESET)\n\n"
-	@for svc in rustfs spark-master kafka nessie jupyter trino cloudbeaver airflow-apiserver; do \
+	@for svc in rustfs spark-master kafka nessie jupyter trino cloudbeaver airflow-apiserver postgres-source; do \
 		container="$(PROJECT_NAME)-$$svc-1"; \
 		printf "  $(CYAN)$$container$(RESET)  "; \
 		status=$$(docker inspect --format='{{.State.Health.Status}}' "$$container" 2>/dev/null || echo "not found"); \
@@ -449,7 +464,8 @@ console:
 	@printf "  $(BOLD)Jupyter$(RESET)      http://localhost:$(JUPYTER_PORT_VAR)?token=$(JUPYTER_TOKEN)\n\n"
 	@printf "  $(BOLD)Trino UI$(RESET)     http://localhost:$(TRINO_PORT_VAR)\n"
 	@printf "  $(BOLD)CloudBeaver$(RESET)  http://localhost:$(HUE_PORT_VAR)  (create admin on first launch)\n"
-	@printf "  $(BOLD)Airflow UI$(RESET)   http://localhost:$(AIRFLOW_PORT_VAR)  ($(AIRFLOW_ADMIN_USER) / $(AIRFLOW_ADMIN_PASSWORD))\n\n"
+	@printf "  $(BOLD)Airflow UI$(RESET)   http://localhost:$(AIRFLOW_PORT_VAR)  ($(AIRFLOW_ADMIN_USER) / $(AIRFLOW_ADMIN_PASSWORD))\n"
+	@printf "  $(BOLD)PostgreSQL$(RESET)   localhost:$(POSTGRES_SOURCE_PORT_VAR)  (payments / payments123)\n\n"
 	@printf "  $(DIM)aws s3 --endpoint-url http://localhost:$(S3_PORT) ls$(RESET)\n\n"
 
 console-ssl:
@@ -537,6 +553,33 @@ build-etl-app:
 	@$(COMPOSE_LOCAL) --profile build-only build etl-app
 	@printf "$(GREEN)✔  Built $(PROJECT_NAME)-etl-app:latest$(RESET)\n"
 	@printf "$(DIM)   Trigger the DAG: http://localhost:$(AIRFLOW_PORT_VAR) → weather_etl_baku$(RESET)\n"
+
+# ── Data-generator build & run ─────────────────────────────────────
+build-data-generator:
+	@printf "$(BOLD)$(CYAN)▶  Building data-generator image [instance: $(INSTANCE)]...$(RESET)\n"
+	@$(COMPOSE_LOCAL) --profile build-only build data-generator
+	@printf "$(GREEN)✔  Built $(PROJECT_NAME)-data-generator:latest$(RESET)\n"
+	@printf "$(DIM)   Seed data: make run-data-generator START=YYYY-MM-DD END=YYYY-MM-DD ROWS=N$(RESET)\n"
+
+run-data-generator:
+	@printf "$(BOLD)$(CYAN)▶  Running data-generator: $(START) → $(END) ($(ROWS) rows/day) [instance: $(INSTANCE)]...$(RESET)\n"
+	@docker run --rm \
+		--network $(NETWORK_NAME) \
+		-e PG_HOST=postgres-source \
+		-e PG_PORT=5432 \
+		-e PG_DB=$(POSTGRES_SOURCE_DB) \
+		-e PG_USER=$(POSTGRES_SOURCE_USER) \
+		-e PG_PASSWORD=$(POSTGRES_SOURCE_PASSWORD) \
+		$(PROJECT_NAME)-data-generator:latest \
+		data_generator \
+		--start-date $(START) \
+		--end-date $(END) \
+		--rows-per-day $(ROWS)
+	@printf "$(GREEN)✔  Data generation complete.$(RESET)\n"
+
+logs-postgres-source:
+	@printf "$(BOLD)$(BLUE)▶  Streaming postgres-source logs (Ctrl-C to exit)...$(RESET)\n"
+	@$(COMPOSE_LOCAL) logs -f --tail=100 postgres-source
 
 reset-nessie:
 	@printf "$(BOLD)$(RED)⚠  Wiping all Nessie state for instance '$(INSTANCE)' — every catalog ref, branch, and tag will be lost.$(RESET)\n"
