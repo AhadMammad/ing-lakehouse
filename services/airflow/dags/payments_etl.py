@@ -19,8 +19,7 @@ import os
 from datetime import datetime
 
 from airflow.providers.docker.operators.docker import DockerOperator
-from airflow.sdk import DAG
-from airflow.utils.task_group import TaskGroup
+from airflow.sdk import DAG, TaskGroup
 
 ETL_IMAGE = os.environ["ETL_APP_IMAGE"]
 NETWORK = os.environ["LAKEHOUSE_NETWORK"]
