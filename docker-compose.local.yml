@@ -12,6 +12,8 @@ name: ing-lakehouse
 # ─────────────────────────────────────────────────────────────────
 
 include:
+  - services/postgres-source/docker-compose.yml
+  - services/data-generator/docker-compose.yml
   - services/rustfs/docker-compose.singlenode.yml
   - services/spark/docker-compose.singlenode.yml
   - services/kafka/docker-compose.singlenode.yml

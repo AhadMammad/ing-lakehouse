@@ -73,6 +73,11 @@ x-airflow-common:
     # passes the worker's env through to the child) — one source of truth.
     RUSTFS_ACCESS_KEY: "${RUSTFS_ACCESS_KEY:-rustfsadmin}"
     RUSTFS_SECRET_KEY: "${RUSTFS_SECRET_KEY:-rustfsadmin123}"
+    # Data generator image + postgres-source credentials for payments_seeder DAG.
+    DATA_GENERATOR_IMAGE: "${COMPOSE_PROJECT_NAME:-ing-lakehouse}-data-generator:latest"
+    POSTGRES_SOURCE_DB: "${POSTGRES_SOURCE_DB:-payments}"
+    POSTGRES_SOURCE_USER: "${POSTGRES_SOURCE_USER:-payments}"
+    POSTGRES_SOURCE_PASSWORD: "${POSTGRES_SOURCE_PASSWORD:-payments123}"
   volumes:
     - ./dags:/opt/airflow/dags:ro
     - airflow-logs:/opt/airflow/logs
