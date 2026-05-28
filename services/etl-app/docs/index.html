@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>etl-app — Service Documentation</title>
+<style>
+  :root {
+    --bg: #fdfdfc;
+    --fg: #1f2328;
+    --muted: #57606a;
+    --accent: #0969da;
+    --accent-soft: #ddf4ff;
+    --border: #d0d7de;
+    --code-bg: #f6f8fa;
+    --bronze: #b08654;
+    --silver: #8a8d91;
+    --gold: #c69214;
+    --warn: #9a6700;
+    --warn-bg: #fff8c5;
+    --danger: #cf222e;
+    --ok: #1a7f37;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, pre, kbd, samp {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+  }
+  code {
+    background: var(--code-bg);
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    line-height: 1.45;
+  }
+  pre code { background: transparent; border: 0; padding: 0; }
+
+  .layout { display: flex; min-height: 100vh; }
+  nav.toc {
+    width: 280px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    padding: 24px 18px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    background: #fafbfc;
+  }
+  nav.toc h1 {
+    font-size: 16px;
+    margin: 0 0 4px 0;
+    color: var(--fg);
+  }
+  nav.toc .tag {
+    display: inline-block;
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 18px;
+    font-family: ui-monospace, monospace;
+  }
+  nav.toc ol {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    counter-reset: section;
+  }
+  nav.toc ol > li {
+    counter-increment: section;
+    margin: 2px 0;
+  }
+  nav.toc ol > li > a::before {
+    content: counter(section) ". ";
+    color: var(--muted);
+  }
+  nav.toc a {
+    display: block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    color: var(--fg);
+    font-size: 13.5px;
+  }
+  nav.toc a:hover { background: var(--accent-soft); text-decoration: none; }
+  nav.toc ul {
+    list-style: none;
+    padding-left: 18px;
+    margin: 2px 0 6px 0;
+  }
+  nav.toc ul a {
+    font-size: 12.5px;
+    color: var(--muted);
+    padding: 2px 8px;
+  }
+
+  main {
+    flex: 1;
+    max-width: 980px;
+    padding: 32px 48px 80px;
+    min-width: 0;
+  }
+  h1.title { font-size: 28px; margin: 0 0 4px; }
+  .lead {
+    color: var(--muted);
+    font-size: 15px;
+    margin: 0 0 24px;
+    max-width: 720px;
+  }
+  h2 {
+    font-size: 22px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+    margin: 48px 0 16px;
+    scroll-margin-top: 20px;
+  }
+  h3 {
+    font-size: 17px;
+    margin: 28px 0 10px;
+    scroll-margin-top: 20px;
+  }
+  h4 {
+    font-size: 14.5px;
+    margin: 18px 0 8px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12px 0 20px;
+    font-size: 13.5px;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 7px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--code-bg); font-weight: 600; }
+  tbody tr:nth-child(even) td { background: #fafbfc; }
+  td code { font-size: 12.5px; }
+
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    vertical-align: middle;
+  }
+  .b-bronze { background: #fbeada; color: var(--bronze); border: 1px solid #e8c79a; }
+  .b-silver { background: #ececec; color: #555; border: 1px solid #cfcfcf; }
+  .b-gold { background: #fff4cc; color: var(--gold); border: 1px solid #f0d873; }
+  .b-append { background: #ddf4ff; color: #0550ae; border: 1px solid #54aeff; }
+  .b-upsert { background: #dafbe1; color: var(--ok); border: 1px solid #b4e4c5; }
+  .b-overwrite { background: #ffebe9; color: var(--danger); border: 1px solid #ff8182; }
+  .b-snapshot { background: #ecf0ff; color: #4338ca; border: 1px solid #c7d2fe; }
+
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 10px 14px;
+    margin: 14px 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .callout.warn {
+    border-left-color: var(--warn);
+    background: var(--warn-bg);
+  }
+  .callout p { margin: 4px 0; }
+
+  .arch-diagram {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 18px;
+    font-family: ui-monospace, monospace;
+    font-size: 12.5px;
+    line-height: 1.5;
+    white-space: pre;
+    overflow-x: auto;
+    color: var(--fg);
+  }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 12.5px;
+  }
+
+  @media (max-width: 900px) {
+    .layout { flex-direction: column; }
+    nav.toc { width: 100%; height: auto; position: relative; }
+    main { padding: 20px; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav class="toc">
+  <h1>etl-app</h1>
+  <div class="tag">v0.1.0 · python 3.11</div>
+  <ol>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#modules">Module Map</a></li>
+    <li><a href="#pipelines">Pipelines</a>
+      <ul>
+        <li><a href="#crypto">Crypto</a></li>
+        <li><a href="#weather">Weather</a></li>
+        <li><a href="#payments">Payments</a></li>
+      </ul>
+    </li>
+    <li><a href="#config">Configuration</a></li>
+    <li><a href="#orchestration">Orchestration</a></li>
+    <li><a href="#local-dev">Local Development</a></li>
+    <li><a href="#reference">Reference</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<h1 class="title">etl-app</h1>
+<p class="lead">
+  A lightweight Python container that runs the lakehouse's medallion ETL: three independent
+  pipelines (<strong>crypto</strong>, <strong>weather</strong>, <strong>payments</strong>) materializing
+  bronze / silver / gold <a href="https://iceberg.apache.org/">Apache Iceberg</a> tables on
+  <a href="https://rustfs.com/">RustFS</a>, cataloged by <a href="https://projectnessie.org/">Nessie</a>,
+  spawned on-demand by Airflow's <code>DockerOperator</code>.
+</p>
+
+<!-- ─────────────────────────── OVERVIEW ─────────────────────────── -->
+<h2 id="overview">1. Overview</h2>
+
+<p>
+  <code>etl-app</code> is a single Python package (<code>etl_app/</code>) packaged into a Docker
+  image. It is <strong>not a long-running service</strong> — Compose builds it under the
+  <code>build-only</code> profile (<a href="../docker-compose.yml">services/etl-app/docker-compose.yml</a>),
+  and Airflow's DAG layer spawns ephemeral containers for each task. The image entrypoint is
+  <code>python -m</code>, so DAGs pass module paths as commands:
+</p>
+
+<pre><code>docker run --rm \
+  -e NESSIE_URI=http://nessie:19120/iceberg \
+  -e AWS_S3_ENDPOINT=http://rustfs:9000 \
+  -e AWS_ACCESS_KEY_ID=… -e AWS_SECRET_ACCESS_KEY=… \
+  ing-lakehouse-etl-app:latest \
+  etl_app.jobs.crypto_bronze --date 2026-05-21</code></pre>
+
+<h4>Design principles</h4>
+<ul>
+  <li><strong>Medallion</strong> — bronze (raw, append-only), silver (typed + deduped), gold (business-ready aggregates).</li>
+  <li><strong>Idempotent by logical date</strong> — re-running a job for the same <code>--date</code> produces the same table state. Bronze snapshots overwrite per <code>logical_date</code>; silver upserts on natural keys; gold marts overwrite per partition (or full-table for CLV).</li>
+  <li><strong>No framework</strong> — module-level constants instead of a Settings class, <code>argparse</code> CLIs, <code>polars</code> for in-memory transforms, <code>pyiceberg</code> for table I/O.</li>
+  <li><strong>One image, many jobs</strong> — same container runs every job; the command line decides which.</li>
+</ul>
+
+<!-- ─────────────────────────── ARCHITECTURE ─────────────────────────── -->
+<h2 id="architecture">2. Architecture</h2>
+
+<p>The etl-app sits between source systems and the lakehouse query layer:</p>
+
+<div class="arch-diagram">
+┌──────────────────────────┐     ┌──────────────────────────┐
+│  External APIs           │     │  postgres-source         │
+│  • CoinGecko /markets    │     │  payments OLTP (7 tables)│
+│  • Open-Meteo /forecast  │     │  seeded by data-generator│
+└─────────────┬────────────┘     └─────────────┬────────────┘
+              │                                │
+              │    requests / connectorx       │
+              ▼                                ▼
+        ┌─────────────────────────────────────────────┐
+        │              etl-app (Docker)               │
+        │   ┌─────────────────────────────────────┐   │
+        │   │  jobs/crypto_*.py  jobs/weather_*.py│   │
+        │   │  jobs/payments_*.py                 │   │
+        │   │  catalog.py · _iceberg_utils.py     │   │
+        │   └────────────┬────────────────────────┘   │
+        └────────────────┼────────────────────────────┘
+                         │   PyIceberg over REST
+                         ▼
+        ┌─────────────────────────────────────────────┐
+        │  Nessie REST Catalog (port 19120)           │  ← namespaces + table metadata
+        └─────────────────────────────────────────────┘
+                         │   S3 (path-style)
+                         ▼
+        ┌─────────────────────────────────────────────┐
+        │  RustFS (S3-compatible)                     │
+        │  bucket: iceberg-warehouse                  │
+        │  └── warehouse/{bronze,silver,gold}/…       │
+        └─────────────────────────────────────────────┘
+                         │   read by
+                         ▼
+              Trino · Spark · Jupyter (PyIceberg)
+</div>
+
+<p>
+  Inside the etl-app, every job follows the same shape:
+  <strong>extract → transform (polars) → write (PyIceberg)</strong>.
+  The <a href="../etl_app/catalog.py">catalog.py</a> module is the single point of contact with Nessie;
+  the <a href="../etl_app/jobs/_iceberg_utils.py"><code>load_or_create</code></a> helper makes
+  table creation race-safe so parallel TaskGroups don't collide on first run.
+</p>
+
+<!-- ─────────────────────────── MODULES ─────────────────────────── -->
+<h2 id="modules">3. Module Map</h2>
+
+<table>
+  <thead><tr><th>Path</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><a href="../etl_app/config.py"><code>etl_app/config.py</code></a></td>
+        <td>Module-level constants read from env (<code>NESSIE_URI</code>, <code>S3_*</code>, <code>PG_*</code>). No Pydantic, no Settings class.</td></tr>
+    <tr><td><a href="../etl_app/catalog.py"><code>etl_app/catalog.py</code></a></td>
+        <td><code>get_catalog()</code> returns a configured <code>RestCatalog</code>; <code>ensure_namespace()</code> is race-safe.</td></tr>
+    <tr><td><a href="../etl_app/jobs/_iceberg_utils.py"><code>etl_app/jobs/_iceberg_utils.py</code></a></td>
+        <td><code>load_or_create(catalog, identifier, schema, partition_spec)</code> — idempotent table getter.</td></tr>
+    <tr><td colspan="2"><strong>Sources</strong></td></tr>
+    <tr><td><a href="../etl_app/sources/crypto/"><code>sources/crypto/</code></a></td>
+        <td><code>client.py</code> = CoinGecko <code>/markets</code> fetcher (top-20 USD).
+            <code>schemas.py</code> = bronze + silver + gold Iceberg schemas and partition specs.</td></tr>
+    <tr><td><a href="../etl_app/sources/weather/"><code>sources/weather/</code></a></td>
+        <td><code>client.py</code> = Open-Meteo hourly forecast for Baku.
+            <code>schemas.py</code> = bronze + silver + gold schemas.</td></tr>
+    <tr><td><a href="../etl_app/sources/postgres/"><code>sources/postgres/</code></a></td>
+        <td><code>client.py</code> = connectorx Polars reader. <code>schemas.py</code> = SQL templates +
+            7 bronze + 8 silver + 4 gold table specs.</td></tr>
+    <tr><td colspan="2"><strong>Jobs (CLI entry points)</strong></td></tr>
+    <tr><td><a href="../etl_app/jobs/crypto_bronze.py"><code>jobs/crypto_bronze.py</code></a></td><td>CoinGecko → <code>bronze.crypto_prices_raw</code> (append)</td></tr>
+    <tr><td><a href="../etl_app/jobs/crypto_silver.py"><code>jobs/crypto_silver.py</code></a></td><td>Bronze → <code>silver.crypto_prices_daily</code> (upsert)</td></tr>
+    <tr><td><a href="../etl_app/jobs/crypto_gold.py"><code>jobs/crypto_gold.py</code></a></td><td>Silver → <code>gold.crypto_market_daily</code> (overwrite by day)</td></tr>
+    <tr><td><a href="../etl_app/jobs/weather_bronze.py"><code>jobs/weather_bronze.py</code></a></td><td>Open-Meteo → <code>bronze.weather_raw</code> (append)</td></tr>
+    <tr><td><a href="../etl_app/jobs/weather_silver.py"><code>jobs/weather_silver.py</code></a></td><td>Bronze → <code>silver.weather_hourly</code> (upsert)</td></tr>
+    <tr><td><a href="../etl_app/jobs/weather_gold.py"><code>jobs/weather_gold.py</code></a></td><td>Silver → <code>gold.weather_daily</code> (overwrite by city+day)</td></tr>
+    <tr><td><a href="../etl_app/jobs/payments_bronze.py"><code>jobs/payments_bronze.py</code></a></td><td>Postgres → 7 bronze tables (<code>--table {…}</code>)</td></tr>
+    <tr><td><a href="../etl_app/jobs/payments_silver.py"><code>jobs/payments_silver.py</code></a></td><td>Bronze → 4 dims + 4 facts Kimball star (<code>--table {…}</code>)</td></tr>
+    <tr><td><a href="../etl_app/jobs/payments_gold.py"><code>jobs/payments_gold.py</code></a></td><td>Silver → 4 business marts (<code>--mart {…}</code>)</td></tr>
+  </tbody>
+</table>
+
+<!-- ─────────────────────────── PIPELINES ─────────────────────────── -->
+<h2 id="pipelines">4. Pipelines</h2>
+
+<!-- ─────────── CRYPTO ─────────── -->
+<h3 id="crypto">4.1 Crypto — top-20 CoinGecko markets</h3>
+
+<p>
+  Pulls the top 20 cryptocurrencies by market cap from the public
+  <a href="https://api.coingecko.com/api/v3/coins/markets">CoinGecko <code>/markets</code></a>
+  endpoint (no API key). One row per coin, per logical day.
+</p>
+
+<table>
+  <thead><tr><th>Layer</th><th>Iceberg table</th><th>Write mode</th><th>Partition</th><th>Upsert / dedup key</th></tr></thead>
+  <tbody>
+    <tr><td><span class="badge b-bronze">bronze</span></td>
+        <td><code>bronze.crypto_prices_raw</code></td>
+        <td><span class="badge b-append">append</span></td>
+        <td><code>day(ingest_ts)</code></td>
+        <td>—</td></tr>
+    <tr><td><span class="badge b-silver">silver</span></td>
+        <td><code>silver.crypto_prices_daily</code></td>
+        <td><span class="badge b-upsert">upsert</span></td>
+        <td><code>identity(day)</code></td>
+        <td><code>(coin_id, day)</code></td></tr>
+    <tr><td><span class="badge b-gold">gold</span></td>
+        <td><code>gold.crypto_market_daily</code></td>
+        <td><span class="badge b-overwrite">overwrite by day</span></td>
+        <td><code>identity(day)</code></td>
+        <td>—</td></tr>
+  </tbody>
+</table>
+
+<h4>Bronze schema — <code>crypto_prices_raw</code></h4>
+<table>
+  <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>coin_id</code></td><td>string</td><td>✓</td><td>natural key (e.g. <code>bitcoin</code>)</td></tr>
+    <tr><td><code>symbol</code>, <code>name</code></td><td>string</td><td></td><td></td></tr>
+    <tr><td><code>current_price_usd</code></td><td>double</td><td></td><td></td></tr>
+    <tr><td><code>market_cap_usd</code>, <code>market_cap_rank</code></td><td>double / int</td><td></td><td></td></tr>
+    <tr><td><code>total_volume_usd</code>, <code>high_24h_usd</code>, <code>low_24h_usd</code></td><td>double</td><td></td><td></td></tr>
+    <tr><td><code>price_change_24h_usd</code>, <code>price_change_percentage_24h</code>, <code>price_change_percentage_7d</code></td><td>double</td><td></td><td></td></tr>
+    <tr><td><code>market_cap_change_24h</code>, <code>market_cap_change_percentage_24h</code></td><td>double</td><td></td><td></td></tr>
+    <tr><td><code>circulating_supply</code>, <code>total_supply</code>, <code>max_supply</code></td><td>double</td><td></td><td></td></tr>
+    <tr><td><code>ath_usd</code>, <code>ath_change_percentage</code></td><td>double</td><td></td><td></td></tr>
+    <tr><td><code>last_updated</code></td><td>timestamptz</td><td></td><td>from CoinGecko payload</td></tr>
+    <tr><td><code>ingest_ts</code></td><td>timestamptz</td><td>✓</td><td>partition source, stamped at write</td></tr>
+    <tr><td><code>logical_date</code></td><td>date</td><td>✓</td><td>= <code>--date</code> CLI arg</td></tr>
+    <tr><td><code>source</code></td><td>string</td><td>✓</td><td>literal <code>coingecko</code></td></tr>
+    <tr><td><code>raw_payload</code></td><td>string</td><td></td><td>full coin dict as JSON (for replay)</td></tr>
+  </tbody>
+</table>
+
+<h4>Silver schema — <code>crypto_prices_daily</code></h4>
+<p>Drops housekeeping (<code>raw_payload</code>, <code>logical_date</code>, <code>source</code>, <code>ingest_ts</code>), adds <code>day</code> (date). Dedupes on <code>(coin_id, day)</code> keeping the latest <code>ingest_ts</code>; upserts on <code>(coin_id, day)</code>.</p>
+
+<h4>Gold schema — <code>gold.crypto_market_daily</code> (1 row per day)</h4>
+<table>
+  <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>day</code></td><td>date</td><td>partition key</td></tr>
+    <tr><td><code>coin_count</code></td><td>int</td><td>distinct coins observed</td></tr>
+    <tr><td><code>total_market_cap_usd</code></td><td>double</td><td>sum across coins</td></tr>
+    <tr><td><code>total_volume_usd</code></td><td>double</td><td>sum 24h volume</td></tr>
+    <tr><td><code>top_gainer_coin_id</code> / <code>top_gainer_pct_24h</code></td><td>string / double</td><td>argmax on <code>price_change_percentage_24h</code></td></tr>
+    <tr><td><code>top_loser_coin_id</code> / <code>top_loser_pct_24h</code></td><td>string / double</td><td>argmin on the same field</td></tr>
+    <tr><td><code>highest_volume_coin_id</code> / <code>highest_volume_usd</code></td><td>string / double</td><td>argmax on <code>total_volume_usd</code></td></tr>
+    <tr><td><code>computed_at</code></td><td>timestamptz</td><td>job execution time</td></tr>
+  </tbody>
+</table>
+
+<h4>CLI</h4>
+<pre><code>python -m etl_app.jobs.crypto_bronze --date 2026-05-21
+python -m etl_app.jobs.crypto_silver --date 2026-05-21
+python -m etl_app.jobs.crypto_gold   --date 2026-05-21</code></pre>
+
+<!-- ─────────── WEATHER ─────────── -->
+<h3 id="weather">4.2 Weather — Open-Meteo hourly (Baku)</h3>
+
+<p>
+  Pulls hourly forecast/observation data for Baku (40.4093°N, 49.8671°E) from
+  <a href="https://api.open-meteo.com/v1/forecast">Open-Meteo</a> (no API key). One row per
+  hour, per city.
+</p>
+
+<table>
+  <thead><tr><th>Layer</th><th>Iceberg table</th><th>Write mode</th><th>Partition</th><th>Upsert key</th></tr></thead>
+  <tbody>
+    <tr><td><span class="badge b-bronze">bronze</span></td><td><code>bronze.weather_raw</code></td>
+        <td><span class="badge b-append">append</span></td><td><code>day(ingest_ts)</code></td><td>—</td></tr>
+    <tr><td><span class="badge b-silver">silver</span></td><td><code>silver.weather_hourly</code></td>
+        <td><span class="badge b-upsert">upsert</span></td><td><code>day(observation_ts)</code></td><td><code>(city, observation_ts)</code></td></tr>
+    <tr><td><span class="badge b-gold">gold</span></td><td><code>gold.weather_daily</code></td>
+        <td><span class="badge b-overwrite">overwrite by (city, day)</span></td><td><code>identity(city)</code></td><td>—</td></tr>
+  </tbody>
+</table>
+
+<h4>Bronze schema — <code>weather_raw</code></h4>
+<table>
+  <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>city</code></td><td>string</td><td>✓</td><td>literal <code>Baku</code></td></tr>
+    <tr><td><code>lat</code>, <code>lon</code></td><td>double</td><td></td><td></td></tr>
+    <tr><td><code>observation_ts</code></td><td>timestamptz</td><td>✓</td><td>hour timestamp (UTC)</td></tr>
+    <tr><td><code>temperature_2m</code></td><td>double</td><td></td><td>°C at 2 m</td></tr>
+    <tr><td><code>relative_humidity_2m</code></td><td>double</td><td></td><td>%</td></tr>
+    <tr><td><code>wind_speed_10m</code></td><td>double</td><td></td><td>m/s at 10 m</td></tr>
+    <tr><td><code>precipitation</code></td><td>double</td><td></td><td>mm</td></tr>
+    <tr><td><code>pressure_msl</code></td><td>double</td><td></td><td>hPa</td></tr>
+    <tr><td><code>cloud_cover</code></td><td>double</td><td></td><td>%</td></tr>
+    <tr><td><code>ingest_ts</code></td><td>timestamptz</td><td>✓</td><td>partition source</td></tr>
+    <tr><td><code>source</code></td><td>string</td><td>✓</td><td>literal <code>open-meteo</code></td></tr>
+    <tr><td><code>raw_payload</code></td><td>string</td><td></td><td>full API response (JSON)</td></tr>
+  </tbody>
+</table>
+
+<h4>Silver schema — <code>weather_hourly</code></h4>
+<p>Same observation columns, drops <code>raw_payload</code> and (after dedup) <code>ingest_ts</code>. Partition by <code>day(observation_ts)</code>; upsert on <code>(city, observation_ts)</code>.</p>
+
+<h4>Gold schema — <code>gold.weather_daily</code> (1 row per city × day)</h4>
+<table>
+  <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>city</code></td><td>string</td><td>partition key</td></tr>
+    <tr><td><code>day</code></td><td>date</td><td></td></tr>
+    <tr><td><code>temp_min</code>, <code>temp_max</code>, <code>temp_avg</code></td><td>double</td><td>°C</td></tr>
+    <tr><td><code>humidity_avg</code></td><td>double</td><td>% mean</td></tr>
+    <tr><td><code>wind_max</code></td><td>double</td><td>m/s max</td></tr>
+    <tr><td><code>precipitation_total</code></td><td>double</td><td>mm sum</td></tr>
+    <tr><td><code>hours_observed</code></td><td>int</td><td>row count for the day (≤24)</td></tr>
+    <tr><td><code>computed_at</code></td><td>timestamptz</td><td></td></tr>
+  </tbody>
+</table>
+
+<h4>CLI</h4>
+<pre><code>python -m etl_app.jobs.weather_bronze --date 2026-05-21
+python -m etl_app.jobs.weather_silver --date 2026-05-21
+python -m etl_app.jobs.weather_gold   --date 2026-05-21</code></pre>
+
+<!-- ─────────── PAYMENTS ─────────── -->
+<h3 id="payments">4.3 Payments — Postgres OLTP → Kimball star → marts</h3>
+
+<p>
+  The largest pipeline. Reads from <a href="../../postgres-source/">postgres-source</a>
+  (seeded by <a href="../../data-generator/">data-generator</a>) into 7 bronze tables, then
+  a Kimball star (4 dims + 4 facts) in silver, then 4 business marts in gold.
+</p>
+
+<h4>Bronze — 7 tables</h4>
+<table>
+  <thead><tr><th>Table</th><th>Source</th><th>Mode</th><th>Filter</th></tr></thead>
+  <tbody>
+    <tr><td><code>bronze.payments_merchants_raw</code></td><td><code>merchants</code></td><td><span class="badge b-snapshot">snapshot</span></td><td>full table</td></tr>
+    <tr><td><code>bronze.payments_customers_raw</code></td><td><code>customers</code></td><td><span class="badge b-snapshot">snapshot</span></td><td>full table</td></tr>
+    <tr><td><code>bronze.payments_methods_raw</code></td><td><code>payment_methods</code></td><td><span class="badge b-snapshot">snapshot</span></td><td>full table</td></tr>
+    <tr><td><code>bronze.payments_payments_raw</code></td><td><code>payments</code></td><td><span class="badge b-overwrite">incremental</span></td><td><code>WHERE updated_at::date = '{date}'</code></td></tr>
+    <tr><td><code>bronze.payments_refunds_raw</code></td><td><code>refunds</code></td><td><span class="badge b-overwrite">incremental</span></td><td><code>WHERE updated_at::date = '{date}'</code></td></tr>
+    <tr><td><code>bronze.payments_fees_raw</code></td><td><code>fees</code></td><td><span class="badge b-overwrite">incremental</span></td><td><code>WHERE created_at::date = '{date}'</code></td></tr>
+    <tr><td><code>bronze.payments_settlements_raw</code></td><td><code>settlements</code></td><td><span class="badge b-overwrite">incremental</span></td><td><code>WHERE settlement_date = '{date}'</code></td></tr>
+  </tbody>
+</table>
+
+<p>
+  All bronze tables append the housekeeping columns <code>ingest_ts</code> (timestamptz, required),
+  <code>logical_date</code> (date), <code>source</code> (literal <code>postgres-source</code>), and
+  <code>raw_payload</code> (JSON of source columns). UUIDs are cast to <code>text</code> in the SQL
+  template so connectorx → Arrow conversion stays clean. Money columns use
+  <code>DecimalType(14, 2)</code>.
+</p>
+
+<h4>Silver — Kimball star (4 dims + 4 facts)</h4>
+<table>
+  <thead><tr><th>Table</th><th>Kind</th><th>Natural key</th><th>Partition</th><th>Source bronze</th></tr></thead>
+  <tbody>
+    <tr><td><code>silver.dim_customer</code></td><td>dim (SCD-1)</td><td><code>customer_id</code></td><td>—</td><td>customers</td></tr>
+    <tr><td><code>silver.dim_merchant</code></td><td>dim (SCD-1)</td><td><code>merchant_id</code></td><td>—</td><td>merchants</td></tr>
+    <tr><td><code>silver.dim_payment_method</code></td><td>dim (SCD-1)</td><td><code>method_id</code></td><td>—</td><td>methods</td></tr>
+    <tr><td><code>silver.dim_date</code></td><td>dim (generated)</td><td><code>date</code></td><td>—</td><td>none (synthesized from <code>--date</code>)</td></tr>
+    <tr><td><code>silver.fact_payments</code></td><td>fact</td><td><code>payment_id</code></td><td><code>identity(payment_date)</code></td><td>payments</td></tr>
+    <tr><td><code>silver.fact_refunds</code></td><td>fact</td><td><code>refund_id</code></td><td><code>identity(refund_date)</code></td><td>refunds</td></tr>
+    <tr><td><code>silver.fact_fees</code></td><td>fact</td><td><code>fee_id</code></td><td><code>identity(fee_date)</code></td><td>fees</td></tr>
+    <tr><td><code>silver.fact_settlements</code></td><td>fact</td><td><code>settlement_id</code></td><td><code>identity(settlement_date)</code></td><td>settlements</td></tr>
+  </tbody>
+</table>
+
+<p>
+  Silver transforms (see <a href="../etl_app/jobs/payments_silver.py"><code>payments_silver.py</code></a>):
+</p>
+<ul>
+  <li><strong>dim_customer</strong> — derives <code>age_band</code> from <code>birthdate</code>; <code>updated_at</code> bumped on every refresh.</li>
+  <li><strong>dim_payment_method</strong> — derives <code>is_expired</code> from <code>(expiry_year, expiry_month)</code>.</li>
+  <li><strong>dim_date</strong> — emits one row for <code>--date</code> with <code>day</code>, <code>month</code>, <code>quarter</code>, <code>year</code>, <code>day_of_week</code>, <code>iso_week</code>, <code>is_weekend</code>.</li>
+  <li><strong>fact_payments</strong> — dedup on <code>payment_id</code> (keep latest <code>ingest_ts</code>), derive <code>payment_date</code> from <code>created_at</code>, compute <code>settled_lag_hours = (settled_at − created_at) / 3600</code>.</li>
+  <li><strong>fact_refunds / fact_fees</strong> — same dedup + derived date pattern.</li>
+  <li><strong>fact_settlements</strong> — uses <code>settlement_date</code> directly.</li>
+</ul>
+
+<h4>Gold — 4 business marts</h4>
+<table>
+  <thead><tr><th>Mart</th><th>Grain</th><th>Partition</th><th>Refresh</th><th>Reads</th></tr></thead>
+  <tbody>
+    <tr><td><code>gold.daily_payment_summary</code></td><td>one row per day</td><td><code>identity(day)</code></td><td>overwrite by <code>day</code></td><td>fact_payments, fact_refunds, fact_fees</td></tr>
+    <tr><td><code>gold.daily_revenue_by_merchant</code></td><td>(merchant, day)</td><td><code>identity(day)</code></td><td>overwrite by <code>day</code></td><td>fact_payments, fact_refunds, fact_fees, dim_merchant</td></tr>
+    <tr><td><code>gold.customer_lifetime_value</code></td><td>one row per customer</td><td>—</td><td>full-table recompute</td><td>fact_payments, fact_refunds, dim_customer</td></tr>
+    <tr><td><code>gold.merchant_settlement_daily</code></td><td>(merchant, settlement_date)</td><td><code>identity(settlement_date)</code></td><td>overwrite by <code>settlement_date</code></td><td>fact_settlements, fact_payments, dim_merchant</td></tr>
+  </tbody>
+</table>
+
+<p>Mart highlights (see <a href="../etl_app/jobs/payments_gold.py"><code>payments_gold.py</code></a>):</p>
+<ul>
+  <li><strong>daily_payment_summary</strong>: <code>total_payments</code>, <code>total_volume</code>, success/failed counts, <code>success_rate_pct</code>, <code>avg_amount</code>, unique customers/merchants, total refunds, total fees, <code>net_revenue</code>.</li>
+  <li><strong>daily_revenue_by_merchant</strong>: gross / net volume per merchant, txn count, success count, joined with merchant name + category.</li>
+  <li><strong>customer_lifetime_value</strong>: total spend, total / successful / failed payment counts, total refunds, <code>refund_rate_pct</code>, <code>first_payment_date</code>, <code>last_payment_date</code>, <code>active_days</code>.</li>
+  <li><strong>merchant_settlement_daily</strong>: settlement amount + count joined with same-date payments to compute <code>settlement_lag_days</code> and gross-volume reconciliation.</li>
+</ul>
+
+<h4>CLI</h4>
+<pre><code># bronze — pick one of the 7 source tables
+python -m etl_app.jobs.payments_bronze --table payments     --date 2026-05-21
+python -m etl_app.jobs.payments_bronze --table merchants    --date 2026-05-21
+# … customers | methods | refunds | fees | settlements
+
+# silver — dims first, then facts
+python -m etl_app.jobs.payments_silver --table dim_customer   --date 2026-05-21
+python -m etl_app.jobs.payments_silver --table fact_payments  --date 2026-05-21
+# … dim_merchant | dim_payment_method | dim_date | fact_refunds | fact_fees | fact_settlements
+
+# gold — pick one of the 4 marts
+python -m etl_app.jobs.payments_gold --mart daily_payment_summary    --date 2026-05-21
+python -m etl_app.jobs.payments_gold --mart daily_revenue_by_merchant --date 2026-05-21
+python -m etl_app.jobs.payments_gold --mart customer_lifetime_value   --date 2026-05-21
+python -m etl_app.jobs.payments_gold --mart merchant_settlement_daily --date 2026-05-21</code></pre>
+
+<!-- ─────────────────────────── CONFIG ─────────────────────────── -->
+<h2 id="config">5. Configuration</h2>
+
+<p>All configuration is environment variables, read at module import in
+<a href="../etl_app/config.py"><code>etl_app/config.py</code></a>. There is no settings file.</p>
+
+<table>
+  <thead><tr><th>Variable</th><th>Default</th><th>Required</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>NESSIE_URI</code></td><td><code>http://nessie:19120/iceberg</code></td><td>no</td><td>Iceberg REST catalog endpoint</td></tr>
+    <tr><td><code>AWS_S3_ENDPOINT</code></td><td><code>http://rustfs:9000</code></td><td>no</td><td>S3-compatible endpoint (path-style)</td></tr>
+    <tr><td><code>AWS_ACCESS_KEY_ID</code></td><td>—</td><td>✓</td><td>RustFS access key</td></tr>
+    <tr><td><code>AWS_SECRET_ACCESS_KEY</code></td><td>—</td><td>✓</td><td>RustFS secret key</td></tr>
+    <tr><td><code>ICEBERG_WAREHOUSE_BUCKET</code></td><td><code>iceberg-warehouse</code></td><td>no</td><td>Bucket holding <code>warehouse/</code> prefix</td></tr>
+    <tr><td><code>PG_HOST</code></td><td>—</td><td>payments only</td><td>postgres-source host</td></tr>
+    <tr><td><code>PG_PORT</code></td><td><code>5432</code></td><td>no</td><td>postgres-source port</td></tr>
+    <tr><td><code>PG_DB</code></td><td>—</td><td>payments only</td><td>database name</td></tr>
+    <tr><td><code>PG_USER</code></td><td>—</td><td>payments only</td><td>username</td></tr>
+    <tr><td><code>PG_PASSWORD</code></td><td>—</td><td>payments only</td><td>password</td></tr>
+  </tbody>
+</table>
+
+<div class="callout warn">
+  <p><strong>Note:</strong> Crypto and Weather jobs do not need <code>PG_*</code> vars. Payments
+  jobs do not need any external credentials beyond Postgres + RustFS. All Iceberg/catalog
+  config is shared.</p>
+</div>
+
+<!-- ─────────────────────────── ORCHESTRATION ─────────────────────────── -->
+<h2 id="orchestration">6. Orchestration</h2>
+
+<p>
+  Every etl-app job is invoked as a <code>DockerOperator</code> task in an Airflow DAG. The
+  Airflow worker mounts the host Docker socket and spawns a fresh container per task using
+  <code>ETL_APP_IMAGE</code> and <code>LAKEHOUSE_NETWORK</code> env vars (set by Compose at worker
+  startup).
+</p>
+
+<h3>DAGs that run etl-app</h3>
+<table>
+  <thead><tr><th>DAG</th><th>Schedule</th><th>Tasks</th><th>File</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>crypto_etl_top20</code></td>
+      <td><code>0 2 * * *</code> (02:00 UTC)</td>
+      <td>bronze → silver → gold (sequential)</td>
+      <td><a href="../../airflow/dags/crypto_etl.py">crypto_etl.py</a></td>
+    </tr>
+    <tr>
+      <td><code>weather_etl_baku</code></td>
+      <td><code>0 6 * * *</code> (06:00 UTC)</td>
+      <td>bronze → silver → gold (sequential)</td>
+      <td><a href="../../airflow/dags/weather_etl.py">weather_etl.py</a></td>
+    </tr>
+    <tr>
+      <td><code>payments_etl</code></td>
+      <td><code>0 3 * * *</code> (03:00 UTC)</td>
+      <td>bronze (7 parallel) → silver.dims (4 parallel) → silver.facts (4 parallel) → gold (4 parallel)</td>
+      <td><a href="../../airflow/dags/payments_etl.py">payments_etl.py</a></td>
+    </tr>
+    <tr>
+      <td><code>payments_source_seeder</code></td>
+      <td>manual trigger</td>
+      <td>runs <code>data-generator</code> image (not etl-app) to populate postgres-source</td>
+      <td><a href="../../airflow/dags/payments_seeder.py">payments_seeder.py</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>DockerOperator wiring (excerpt)</h3>
+<pre><code>COMMON = dict(
+    image=os.environ["ETL_APP_IMAGE"],
+    network_mode=os.environ["LAKEHOUSE_NETWORK"],
+    auto_remove="success",
+    docker_url=os.environ.get("DOCKER_HOST", "unix://var/run/docker.sock"),
+    mount_tmp_dir=False,
+    environment={
+        "NESSIE_URI": "http://nessie:19120/iceberg",
+        "AWS_S3_ENDPOINT": "http://rustfs:9000",
+        "AWS_ACCESS_KEY_ID": os.environ["RUSTFS_ACCESS_KEY"],
+        "AWS_SECRET_ACCESS_KEY": os.environ["RUSTFS_SECRET_KEY"],
+        "ICEBERG_WAREHOUSE_BUCKET": "iceberg-warehouse",
+        # ── payments DAG also ──
+        "PG_HOST": "postgres-source",
+        "PG_DB": os.environ["POSTGRES_SOURCE_DB"],
+        "PG_USER": os.environ["POSTGRES_SOURCE_USER"],
+        "PG_PASSWORD": os.environ["POSTGRES_SOURCE_PASSWORD"],
+    },
+)
+
+DockerOperator(
+    task_id="ingest_payments",
+    command="etl_app.jobs.payments_bronze --table payments --date {{ ds }}",
+    **COMMON,
+)</code></pre>
+
+<h3>payments_etl task graph</h3>
+<div class="arch-diagram">
+bronze (TaskGroup, 7 parallel)
+   ingest_merchants  ingest_customers  ingest_methods
+   ingest_payments   ingest_refunds    ingest_fees    ingest_settlements
+        │
+        ▼
+silver (TaskGroup)
+   dimensions (4 parallel):
+       dim_date  dim_customer  dim_merchant  dim_payment_method
+        │
+        ▼
+   facts (4 parallel):
+       fact_payments  fact_refunds  fact_fees  fact_settlements
+        │
+        ▼
+gold (TaskGroup, 4 parallel)
+   daily_payment_summary  daily_revenue_by_merchant
+   customer_lifetime_value  merchant_settlement_daily
+</div>
+
+<!-- ─────────────────────────── LOCAL DEV ─────────────────────────── -->
+<h2 id="local-dev">7. Local Development</h2>
+
+<h4>Build the image</h4>
+<pre><code>make build-etl-app
+# → docker compose --profile build-only build etl-app
+# → tags &lt;project&gt;-etl-app:latest</code></pre>
+
+<h4>Tail build logs</h4>
+<pre><code>make logs-etl-app</code></pre>
+
+<h4>Run a job manually</h4>
+<pre><code>docker run --rm \
+  --network ing-lakehouse_lakehouse-net \
+  -e NESSIE_URI=http://nessie:19120/iceberg \
+  -e AWS_S3_ENDPOINT=http://rustfs:9000 \
+  -e AWS_ACCESS_KEY_ID=rustfsadmin \
+  -e AWS_SECRET_ACCESS_KEY=rustfsadmin123 \
+  -e ICEBERG_WAREHOUSE_BUCKET=iceberg-warehouse \
+  ing-lakehouse-etl-app:latest \
+  etl_app.jobs.weather_bronze --date 2026-05-21</code></pre>
+
+<h4>Seed payments data</h4>
+<pre><code>make run-data-generator START=2026-01-01 END=2026-05-27 ROWS=500
+# or trigger the payments_source_seeder DAG with conf:
+# { "start_date": "2026-01-01", "end_date": "2026-05-27", "rows_per_day": 500 }</code></pre>
+
+<h4>Inspect tables from Jupyter</h4>
+<pre><code>from etl_app.catalog import get_catalog
+catalog = get_catalog()
+catalog.list_namespaces()                           # [('bronze',), ('silver',), ('gold',)]
+catalog.load_table(("silver", "fact_payments")).scan().to_arrow()</code></pre>
+
+<div class="callout">
+  <p><strong>Idempotency:</strong> any job can be safely re-run for the same <code>--date</code>.
+  Bronze incremental tables overwrite their date slice, silver upserts on natural keys, gold
+  marts overwrite their partition. The one exception is bronze append-only tables (crypto and
+  weather) — re-running them produces duplicate rows that silver dedups out.</p>
+</div>
+
+<!-- ─────────────────────────── REFERENCE ─────────────────────────── -->
+<h2 id="reference">8. Reference</h2>
+
+<h3>Runtime</h3>
+<table>
+  <thead><tr><th>Item</th><th>Value</th></tr></thead>
+  <tbody>
+    <tr><td>Base image</td><td><code>python:3.11-slim</code></td></tr>
+    <tr><td>Image tag</td><td><code>${COMPOSE_PROJECT_NAME}-etl-app:latest</code></td></tr>
+    <tr><td>Entrypoint</td><td><code>python -m</code></td></tr>
+    <tr><td>Workdir</td><td><code>/app</code></td></tr>
+    <tr><td>Lifecycle</td><td>ephemeral — spawned per Airflow task, removed on success</td></tr>
+  </tbody>
+</table>
+
+<h3>Pinned dependencies (<a href="../pyproject.toml">pyproject.toml</a>)</h3>
+<table>
+  <thead><tr><th>Package</th><th>Version</th><th>Used for</th></tr></thead>
+  <tbody>
+    <tr><td><code>pyiceberg[s3fs,pyarrow]</code></td><td><code>0.11.1</code></td><td>Iceberg table I/O, REST catalog</td></tr>
+    <tr><td><code>polars</code></td><td><code>1.9.0</code></td><td>in-memory transforms, joins, dedup</td></tr>
+    <tr><td><code>requests</code></td><td><code>2.32.3</code></td><td>CoinGecko / Open-Meteo HTTP</td></tr>
+    <tr><td><code>connectorx</code></td><td><code>0.3.3</code></td><td>fast Postgres → Arrow reader</td></tr>
+  </tbody>
+</table>
+
+<h3>Source systems</h3>
+<table>
+  <thead><tr><th>Source</th><th>Auth</th><th>Endpoint / connection</th><th>Used by</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>CoinGecko</td>
+      <td>none</td>
+      <td><code>GET https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&amp;order=market_cap_desc&amp;per_page=20&amp;price_change_percentage=24h,7d</code></td>
+      <td>crypto_bronze</td>
+    </tr>
+    <tr>
+      <td>Open-Meteo</td>
+      <td>none</td>
+      <td><code>GET https://api.open-meteo.com/v1/forecast?latitude=40.4093&amp;longitude=49.8671&amp;hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,pressure_msl,cloud_cover&amp;start_date={d}&amp;end_date={d}&amp;timezone=UTC</code></td>
+      <td>weather_bronze</td>
+    </tr>
+    <tr>
+      <td>postgres-source</td>
+      <td><code>PG_*</code> env</td>
+      <td><code>postgresql://{PG_USER}:****@{PG_HOST}:{PG_PORT}/{PG_DB}</code> · 7 tables (merchants, customers, payment_methods, payments, refunds, fees, settlements)</td>
+      <td>payments_bronze</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Iceberg namespaces</h3>
+<table>
+  <thead><tr><th>Namespace</th><th>Tables</th></tr></thead>
+  <tbody>
+    <tr><td><code>bronze</code></td><td><code>crypto_prices_raw</code>, <code>weather_raw</code>, 7× <code>payments_*_raw</code></td></tr>
+    <tr><td><code>silver</code></td><td><code>crypto_prices_daily</code>, <code>weather_hourly</code>, 4 dims, 4 facts</td></tr>
+    <tr><td><code>gold</code></td><td><code>crypto_market_daily</code>, <code>weather_daily</code>, 4 payments marts</td></tr>
+  </tbody>
+</table>
+
+<h3>Exit semantics</h3>
+<ul>
+  <li>Exit <code>0</code> on success (including empty result — empty bronze pull is a no-op, not a failure).</li>
+  <li>Exit non-zero on uncaught exception. Airflow surfaces the stderr in the task log.</li>
+  <li>Argparse validation errors exit <code>2</code> (standard Python behavior).</li>
+</ul>
+
+<h3>Related docs</h3>
+<ul>
+  <li><a href="../../../docs/airflow/dags.md">docs/airflow/dags.md</a> — DAG anatomy and scheduling</li>
+  <li><a href="../../../docs/airflow/operators-tasks.md">docs/airflow/operators-tasks.md</a> — operator taxonomy, DockerOperator</li>
+  <li><a href="../../../docs/iceberg/architecture.md">docs/iceberg/architecture.md</a> — Iceberg internals</li>
+  <li><a href="../../../docs/nessie/">docs/nessie/</a> — REST catalog</li>
+  <li><a href="../../../docs/rustfs/">docs/rustfs/</a> — S3 backend</li>
+</ul>
+
+<footer>
+  etl-app v0.1.0 — service documentation. Generated from source on the <code>feat-source-postgress</code> branch.
+  Path: <code>services/etl-app/docs/index.html</code>.
+</footer>
+
+</main>
+</div>
+
+<script>
+  // Smooth-scroll TOC links
+  document.querySelectorAll('nav.toc a').forEach(a => {
+    a.addEventListener('click', e => {
+      const id = a.getAttribute('href').slice(1);
+      const t = document.getElementById(id);
+      if (t) { e.preventDefault(); t.scrollIntoView({behavior: 'smooth', block: 'start'}); history.pushState(null, '', '#' + id); }
+    });
+  });
+</script>
+</body>
+</html>

@@ -13,14 +13,28 @@ Or via CLI:
 """
 from __future__ import annotations
 
+import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from airflow.providers.docker.operators.docker import DockerOperator
-from airflow.sdk import DAG
+from airflow.sdk import DAG, DeadlineAlert, DeadlineReference, SyncCallback
 
 DATA_GEN_IMAGE = os.environ["DATA_GENERATOR_IMAGE"]
 NETWORK        = os.environ["LAKEHOUSE_NETWORK"]
+
+log = logging.getLogger(__name__)
+
+
+def _deadline_breach(**kwargs):
+    ctx = kwargs.get("context", {})
+    dag_run = ctx.get("dag_run")
+    log.warning(
+        "payments_source_seeder exceeded deadline | dag_run=%s conf=%s",
+        getattr(dag_run, "run_id", dag_run),
+        getattr(dag_run, "conf", None),
+    )
+
 
 with DAG(
     dag_id="payments_source_seeder",
@@ -30,6 +44,11 @@ with DAG(
     max_active_runs=1,
     tags=["payments", "source", "seeder"],
     description="Seed postgres-source with fake payments platform data for a date range",
+    deadline=DeadlineAlert(
+        reference=DeadlineReference.DAGRUN_QUEUED_AT,
+        interval=timedelta(minutes=30),
+        callback=SyncCallback(_deadline_breach),
+    ),
 ) as dag:
     DockerOperator(
         task_id="seed",
