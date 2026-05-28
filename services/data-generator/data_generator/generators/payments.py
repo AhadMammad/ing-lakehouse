@@ -96,8 +96,6 @@ def generate_for_date(
         print(f"  {day}: SKIP — no eligible customers with payment methods yet")
         return
 
-    merchant_ts_map: dict[str, datetime] = {mid: mts for mid, mts in eligible_merchants}
-
     # ── Payments ─────────────────────────────────────────────────
     payment_rows = []
     payment_meta = []  # (payment_id, merchant_id, amount, currency, status)
