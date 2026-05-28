@@ -1,0 +1,28 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "separate-pull-requests": true,
+  "include-component-in-tag": true,
+  "tag-separator": "-",
+  "packages": {
+    ".": {
+      "package-name": "ing-lakehouse",
+      "release-type": "simple",
+      "component": "",
+      "include-component-in-tag": false,
+      "exclude-paths": [
+        "services/data-generator",
+        "services/etl-app"
+      ]
+    },
+    "services/data-generator": {
+      "package-name": "data-generator",
+      "release-type": "python",
+      "component": "data-generator"
+    },
+    "services/etl-app": {
+      "package-name": "etl-app",
+      "release-type": "python",
+      "component": "etl-app"
+    }
+  }
+}
