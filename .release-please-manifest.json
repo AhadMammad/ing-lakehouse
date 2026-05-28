@@ -1,0 +1,5 @@
+{
+  ".": "0.1.0",
+  "services/data-generator": "0.1.0",
+  "services/etl-app": "0.1.0"
+}

@@ -1,0 +1,43 @@
+name: pr-validation
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  commitlint-title:
+    name: PR title (Conventional Commits)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install commitlint
+        run: npm install --no-save @commitlint/cli @commitlint/config-conventional
+      - name: Lint PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: echo "$PR_TITLE" | npx commitlint
+
+  compose-validate:
+    name: docker compose config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Seed .env from template
+        run: cp .env.example .env
+      - name: Validate docker-compose.yml
+        run: docker compose -f docker-compose.yml config -q
+      - name: Validate docker-compose.local.yml
+        run: docker compose -f docker-compose.local.yml config -q
+
+  python-lint:
+    name: ruff (services)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - name: Lint data-generator and etl-app
+        run: uvx ruff check services/data-generator services/etl-app
