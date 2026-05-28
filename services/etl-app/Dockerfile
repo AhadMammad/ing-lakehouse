@@ -16,7 +16,7 @@ WORKDIR /app
 # Pin versions to match the Jupyter notebook environment so behavior
 # stays consistent between exploration and production runs.
 RUN pip install --no-cache-dir \
-      "pyiceberg[s3fs,pyarrow]==0.9.1" \
+      "pyiceberg[s3fs,pyarrow]==0.11.1" \
       "polars==1.9.0" \
       "requests==2.32.3" \
       "connectorx==0.3.3"
