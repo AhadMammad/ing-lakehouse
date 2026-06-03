@@ -1,0 +1,21 @@
+# ─────────────────────────────────────────────────────────────────
+#  dbt — build-only service.
+#
+#  Declared so `make build-dbt` can produce a per-instance image
+#  ($(COMPOSE_PROJECT_NAME)-dbt:latest) that Airflow's DockerOperator
+#  references. The `build-only` profile keeps it out of `make up` —
+#  containers are spawned on-demand by the rideon_etl DAG (or via
+#  `make run-dbt`), not as long-lived services.
+# ─────────────────────────────────────────────────────────────────
+
+services:
+  dbt:
+    image: ${COMPOSE_PROJECT_NAME:-ing-lakehouse}-dbt:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["build-only"]
+    networks:
+      - lakehouse-net
+
+# lakehouse-net is defined in the root docker-compose.local.yml and inherited via include:

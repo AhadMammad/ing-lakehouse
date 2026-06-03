@@ -1,0 +1,18 @@
+version: 2
+
+sources:
+  - name: bronze
+    description: "Raw Rideon OLTP tables landed by etl-app (jobs/rideon_bronze)."
+    database: nessie      # Trino catalog
+    schema: bronze        # Nessie namespace
+    tables:
+      - name: rideon_cities_raw
+      - name: rideon_vehicle_categories_raw
+      - name: rideon_riders_raw
+      - name: rideon_drivers_raw
+      - name: rideon_vehicles_raw
+      - name: rideon_rides_raw
+      - name: rideon_fares_raw
+      - name: rideon_ride_payments_raw
+      - name: rideon_ratings_raw
+      - name: rideon_driver_payouts_raw

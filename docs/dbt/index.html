@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>dbt Project — rideon | ing-lakehouse</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #222636;
+    --border: #2e3347;
+    --accent: #f97316;
+    --accent2: #3b82f6;
+    --green: #22c55e;
+    --yellow: #eab308;
+    --purple: #a78bfa;
+    --red: #ef4444;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --sidebar-w: 260px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; line-height: 1.6; display: flex; min-height: 100vh; }
+
+  /* SIDEBAR */
+  #sidebar {
+    width: var(--sidebar-w); min-width: var(--sidebar-w); background: var(--surface);
+    border-right: 1px solid var(--border); position: sticky; top: 0; height: 100vh;
+    overflow-y: auto; padding: 0 0 40px 0; flex-shrink: 0;
+  }
+  #sidebar h1 { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 20px 16px 8px; border-bottom: 1px solid var(--border); }
+  #sidebar .proj { font-size: 11px; color: var(--muted); padding: 6px 16px 14px; border-bottom: 1px solid var(--border); }
+  #sidebar nav { padding: 8px 0; }
+  #sidebar nav a { display: block; padding: 5px 16px; color: var(--muted); text-decoration: none; font-size: 13px; border-left: 2px solid transparent; transition: all .15s; }
+  #sidebar nav a:hover, #sidebar nav a.active { color: var(--text); border-left-color: var(--accent); background: rgba(249,115,22,.07); }
+  #sidebar nav .group { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 12px 16px 4px; }
+  #sidebar nav .sub { padding-left: 28px; font-size: 12px; }
+
+  /* MAIN */
+  #main { flex: 1; min-width: 0; padding: 40px 48px; max-width: 960px; }
+  section { margin-bottom: 64px; scroll-margin-top: 24px; }
+  h2 { font-size: 22px; font-weight: 700; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 20px; }
+  h3 { font-size: 16px; font-weight: 600; color: var(--text); margin: 28px 0 10px; }
+  h4 { font-size: 13px; font-weight: 600; color: var(--accent); margin: 20px 0 8px; text-transform: uppercase; letter-spacing: .04em; }
+  p { color: var(--muted); margin-bottom: 10px; }
+  code { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 12px; color: #93c5fd; }
+  a { color: var(--accent2); text-decoration: none; }
+
+  /* BADGES */
+  .badge { display: inline-block; border-radius: 4px; padding: 1px 8px; font-size: 11px; font-weight: 600; }
+  .badge-ephemeral { background: rgba(167,139,250,.15); color: var(--purple); border: 1px solid rgba(167,139,250,.3); }
+  .badge-table     { background: rgba(34,197,94,.12);  color: var(--green);  border: 1px solid rgba(34,197,94,.3); }
+  .badge-dim       { background: rgba(59,130,246,.12); color: #60a5fa;       border: 1px solid rgba(59,130,246,.3); }
+  .badge-fact      { background: rgba(249,115,22,.12); color: var(--accent); border: 1px solid rgba(249,115,22,.3); }
+  .badge-mart      { background: rgba(234,179,8,.12);  color: var(--yellow); border: 1px solid rgba(234,179,8,.3); }
+  .badge-source    { background: rgba(148,163,184,.1); color: var(--muted);  border: 1px solid var(--border); }
+
+  /* TABLES */
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 24px; font-size: 13px; }
+  th { background: var(--surface2); color: var(--muted); text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+
+  /* CODE BLOCKS */
+  .code-wrap { position: relative; margin: 10px 0 20px; }
+  .code-wrap pre { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 16px; overflow-x: auto; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 12px; line-height: 1.7; color: #cbd5e1; }
+  .code-label { position: absolute; top: 8px; right: 12px; font-size: 10px; color: var(--muted); font-family: monospace; }
+
+  /* SQL SYNTAX HIGHLIGHT */
+  .kw  { color: #7dd3fc; }   /* keywords */
+  .fn  { color: #c4b5fd; }   /* functions */
+  .str { color: #86efac; }   /* strings */
+  .cmt { color: #475569; font-style: italic; }  /* comments */
+  .ref { color: #fb923c; }   /* {{ ref() / source() }} */
+  .num { color: #fbbf24; }   /* numbers */
+
+  /* MODEL CARDS */
+  .model-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 24px; }
+  .model-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .model-name { font-size: 15px; font-weight: 700; font-family: monospace; color: var(--text); }
+  .model-desc { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+  details summary { cursor: pointer; color: var(--accent2); font-size: 12px; font-weight: 600; user-select: none; padding: 4px 0; }
+  details summary:hover { color: var(--text); }
+  details[open] summary { margin-bottom: 10px; }
+
+  /* ARCH DIAGRAM */
+  .arch { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 24px; margin: 20px 0; text-align: center; font-family: monospace; }
+  .arch-row { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 8px 0; flex-wrap: wrap; }
+  .arch-box { border-radius: 6px; padding: 10px 18px; font-size: 13px; font-weight: 600; min-width: 120px; }
+  .arch-bronze  { background: rgba(148,163,184,.1); border: 1px solid var(--border); color: var(--muted); }
+  .arch-staging { background: rgba(167,139,250,.12); border: 1px solid rgba(167,139,250,.3); color: var(--purple); }
+  .arch-silver  { background: rgba(59,130,246,.12);  border: 1px solid rgba(59,130,246,.3); color: #60a5fa; }
+  .arch-gold    { background: rgba(234,179,8,.12);   border: 1px solid rgba(234,179,8,.3); color: var(--yellow); }
+  .arch-arrow   { color: var(--muted); font-size: 18px; }
+  .arch-sub     { font-size: 11px; font-weight: 400; opacity: .7; display: block; margin-top: 2px; }
+
+  /* ENV TABLE */
+  .env-key { font-family: monospace; color: #93c5fd; }
+  .env-default { font-family: monospace; color: #86efac; font-size: 11px; }
+
+  /* INFRA CARD */
+  .infra-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .infra-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 16px; }
+  .infra-card h4 { margin-top: 0; }
+  .infra-card p { font-size: 12px; }
+
+  /* LAYER SUMMARY */
+  .layer-stat { display: inline-flex; align-items: center; gap: 6px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; margin: 4px; font-size: 12px; }
+  .layer-stat .n { font-weight: 700; font-size: 16px; color: var(--text); }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<aside id="sidebar">
+  <h1>ing-lakehouse</h1>
+  <div class="proj">dbt project · rideon · v0.1.0</div>
+  <nav>
+    <a href="#overview">Overview</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#infrastructure">Infrastructure</a>
+    <div class="group">Models</div>
+    <a href="#sources">Sources (Bronze)</a>
+    <a href="#staging">Staging</a>
+    <a href="#silver-dims" class="sub">↳ Silver Dimensions</a>
+    <a href="#silver-facts" class="sub">↳ Silver Facts</a>
+    <a href="#gold">Gold Marts</a>
+    <div class="group">Reference</div>
+    <a href="#macros">Macros</a>
+    <a href="#tests">Tests</a>
+  </nav>
+</aside>
+
+<main id="main">
+
+<!-- ═══════════════════════════════════════ OVERVIEW ═══════════════════════ -->
+<section id="overview">
+  <h2>Overview</h2>
+  <p>The <strong>rideon</strong> dbt project transforms raw OLTP data from the Rideon ride-hailing platform into a Kimball star schema (silver) and pre-aggregated analytics marts (gold), all persisted as Apache Iceberg tables inside the Nessie catalog.</p>
+
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin:16px 0;">
+    <span class="layer-stat"><span class="n">10</span> source tables</span>
+    <span class="layer-stat"><span class="n">10</span> staging models</span>
+    <span class="layer-stat"><span class="n">6</span> silver dims</span>
+    <span class="layer-stat"><span class="n">4</span> silver facts</span>
+    <span class="layer-stat"><span class="n">4</span> gold marts</span>
+    <span class="layer-stat"><span class="n">1</span> macro</span>
+  </div>
+
+  <table>
+    <tr><th>Property</th><th>Value</th></tr>
+    <tr><td>Project name</td><td><code>rideon</code></td></tr>
+    <tr><td>dbt version</td><td><code>dbt-core 1.9.*</code> + <code>dbt-trino 1.9.*</code></td></tr>
+    <tr><td>Target query engine</td><td>Trino</td></tr>
+    <tr><td>Catalog</td><td>Nessie (Iceberg)</td></tr>
+    <tr><td>Staging materialization</td><td><span class="badge badge-ephemeral">ephemeral</span> — inlined as CTEs, no objects created</td></tr>
+    <tr><td>Silver materialization</td><td><span class="badge badge-table">table</span> — Iceberg tables in <code>nessie.silver</code></td></tr>
+    <tr><td>Gold materialization</td><td><span class="badge badge-table">table</span> — Iceberg tables in <code>nessie.gold</code></td></tr>
+    <tr><td>Orchestration</td><td>Airflow <code>rideon_etl</code> DAG via DockerOperator</td></tr>
+  </table>
+</section>
+
+<!-- ══════════════════════════════════════ ARCHITECTURE ════════════════════ -->
+<section id="architecture">
+  <h2>Architecture</h2>
+  <p>The project follows the <strong>medallion architecture</strong>: raw OLTP data lands in Bronze, is deduplicated through ephemeral Staging CTEs, structured into a Kimball star in Silver, and aggregated into business-facing Gold marts.</p>
+
+  <div class="arch">
+    <div class="arch-row">
+      <div class="arch-box arch-bronze">
+        PostgreSQL OLTP
+        <span class="arch-sub">Rideon source DB</span>
+      </div>
+      <span class="arch-arrow">→</span>
+      <div class="arch-box arch-bronze">
+        Bronze
+        <span class="arch-sub">nessie.bronze (raw Iceberg)</span>
+      </div>
+      <span class="arch-arrow">→</span>
+      <div class="arch-box arch-staging">
+        Staging
+        <span class="arch-sub">ephemeral CTEs</span>
+      </div>
+      <span class="arch-arrow">→</span>
+      <div class="arch-box arch-silver">
+        Silver
+        <span class="arch-sub">nessie.silver (star schema)</span>
+      </div>
+      <span class="arch-arrow">→</span>
+      <div class="arch-box arch-gold">
+        Gold
+        <span class="arch-sub">nessie.gold (marts)</span>
+      </div>
+    </div>
+  </div>
+
+  <h3>Layer Descriptions</h3>
+  <table>
+    <tr><th>Layer</th><th>Namespace</th><th>Materialization</th><th>Purpose</th></tr>
+    <tr>
+      <td><span class="badge badge-source">Bronze</span></td>
+      <td><code>nessie.bronze</code></td>
+      <td>External (etl-app)</td>
+      <td>Raw OLTP tables with full-row CDC appends. Managed by <code>jobs/rideon_bronze</code>, not by dbt.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-ephemeral">Staging</span></td>
+      <td>—</td>
+      <td>Ephemeral CTE</td>
+      <td>Dedup-to-latest-per-PK transforms using <code>ROW_NUMBER() OVER (PARTITION BY pk ORDER BY ingest_ts DESC)</code>. Inlined into Silver — no views or tables created.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-dim">Silver</span></td>
+      <td><code>nessie.silver</code></td>
+      <td>Iceberg table</td>
+      <td>Kimball star schema: 6 dimensions + 4 fact tables. Conformed dims are enriched with attributes from related staging models.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-mart">Gold</span></td>
+      <td><code>nessie.gold</code></td>
+      <td>Iceberg table</td>
+      <td>Pre-aggregated analytics marts by business domain (city performance, driver earnings, rider LTV, surge pricing).</td>
+    </tr>
+  </table>
+</section>
+
+<!-- ══════════════════════════════════════ INFRASTRUCTURE ══════════════════ -->
+<section id="infrastructure">
+  <h2>Infrastructure</h2>
+
+  <div class="infra-grid">
+    <div class="infra-card">
+      <h4>Docker Image</h4>
+      <p>Built from <code>services/dbt/Dockerfile</code> using <code>python:3.11-slim</code>. Tagged <code>${COMPOSE_PROJECT_NAME}-dbt:latest</code>. <code>ENTRYPOINT</code> is <code>dbt</code> — callers pass subcommands directly (e.g. <code>build --select path:models/silver</code>).</p>
+      <p>Profiles are baked in at build time, templated from env vars at runtime. The docker-socket-proxy denies VOLUMES, so bind-mounts are not used.</p>
+    </div>
+    <div class="infra-card">
+      <h4>Airflow Integration</h4>
+      <p>The <code>rideon_etl</code> DAG spawns ephemeral containers via <code>DockerOperator</code> referencing the pre-built image. Silver and gold layers are built in separate operator tasks for dependency isolation.</p>
+      <p>The service is declared with <code>profiles: ["build-only"]</code> so it is excluded from <code>make up</code> — containers are on-demand only.</p>
+    </div>
+  </div>
+
+  <h3>Connection Profile (<code>profiles.yml</code>)</h3>
+  <p>Profile name: <code>rideon</code> · Target: <code>prod</code> · Type: <code>trino</code> · Auth method: <code>none</code></p>
+  <table>
+    <tr><th>Env Var</th><th>Default</th><th>Description</th></tr>
+    <tr><td class="env-key">TRINO_HOST</td><td class="env-default">trino</td><td>Trino coordinator hostname (in-network)</td></tr>
+    <tr><td class="env-key">TRINO_PORT</td><td class="env-default">8080</td><td>In-network port (8081 is the host-side mapping only)</td></tr>
+    <tr><td class="env-key">TRINO_USER</td><td class="env-default">dbt</td><td>Trino username</td></tr>
+    <tr><td class="env-key">TRINO_CATALOG</td><td class="env-default">nessie</td><td>Trino catalog (Nessie-backed Iceberg)</td></tr>
+    <tr><td class="env-key">TRINO_SCHEMA</td><td class="env-default">silver</td><td>Default schema; overridden per-layer via <code>+schema</code></td></tr>
+  </table>
+
+  <h3>Dockerfile</h3>
+  <div class="code-wrap">
+    <span class="code-label">Dockerfile</span>
+    <pre><span class="kw">FROM</span> python:3.11-slim
+
+<span class="kw">WORKDIR</span> /usr/app/dbt
+
+<span class="kw">RUN</span> pip install --no-cache-dir \
+      "dbt-core==1.9.*" \
+      "dbt-trino==1.9.*"
+
+<span class="kw">COPY</span> . /usr/app/dbt
+
+<span class="kw">ENV</span> DBT_PROFILES_DIR=/usr/app/dbt
+
+<span class="kw">ENTRYPOINT</span> ["dbt"]</pre>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════ SOURCES ════════════════════════ -->
+<section id="sources">
+  <h2>Sources (Bronze)</h2>
+  <p>Defined in <code>models/staging/_rideon__sources.yml</code>. All 10 source tables live in the <code>nessie.bronze</code> namespace, written by the <code>etl-app</code> ingestion job.</p>
+
+  <table>
+    <tr><th>Source Name</th><th>Catalog</th><th>Schema</th><th>Table</th><th>Description</th></tr>
+    <tr><td><code>bronze</code></td><td><code>nessie</code></td><td><code>bronze</code></td><td><code>rideon_cities_raw</code></td><td>Service city reference data</td></tr>
+    <tr><td><code>bronze</code></td><td><code>nessie</code></td><td><code>bronze</code></td><td><code>rideon_vehicle_categories_raw</code></td><td>Service tier definitions with pricing rates</td></tr>
+    <tr><td><code>bronze</code></td><td><code>nessie</code></td><td><code>bronze</code></td><td><code>rideon_riders_raw</code></td><td>Rider accounts</td></tr>
+    <tr><td><code>bronze</code></td><td><code>nessie</code></td><td><code>bronze</code></td><td><code>rideon_drivers_raw</code></td><td>Driver accounts and onboarding status</td></tr>
+    <tr><td><code>bronze</code></td><td><code>nessie</code></td><td><code>bronze</code></td><td><code>rideon_vehicles_raw</code></td><td>Vehicle registrations linked to drivers</td></tr>
+    <tr><td><code>bronze</code></td><td><code>nessie</code></td><td><code>bronze</code></td><td><code>rideon_rides_raw</code></td><td>Ride lifecycle events (requested → completed)</td></tr>
+    <tr><td><code>bronze</code></td><td><code>nessie</code></td><td><code>bronze</code></td><td><code>rideon_fares_raw</code></td><td>Fare breakdown per ride</td></tr>
+    <tr><td><code>bronze</code></td><td><code>nessie</code></td><td><code>bronze</code></td><td><code>rideon_ride_payments_raw</code></td><td>Payment transactions per ride</td></tr>
+    <tr><td><code>bronze</code></td><td><code>nessie</code></td><td><code>bronze</code></td><td><code>rideon_ratings_raw</code></td><td>Bidirectional ratings (rider↔driver)</td></tr>
+    <tr><td><code>bronze</code></td><td><code>nessie</code></td><td><code>bronze</code></td><td><code>rideon_driver_payouts_raw</code></td><td>Driver payout records by date</td></tr>
+  </table>
+</section>
+
+<!-- ══════════════════════════════════════ STAGING ═════════════════════════ -->
+<section id="staging">
+  <h2>Staging Models</h2>
+  <p>All 10 staging models are <span class="badge badge-ephemeral">ephemeral</span> — they compile into CTEs inside the Silver models. The shared pattern: <code>ROW_NUMBER() OVER (PARTITION BY &lt;pk&gt; ORDER BY ingest_ts DESC) = 1</code> to keep the latest version of each record from the append-only bronze tables.</p>
+
+  <!-- stg_rideon__cities -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">stg_rideon__cities</span>
+      <span class="badge badge-ephemeral">ephemeral</span>
+    </div>
+    <p class="model-desc">Dedup-to-latest over <code>rideon_cities_raw</code>. Renames <code>name</code> → <code>city_name</code>.</p>
+    <table>
+      <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+      <tr><td><code>city_id</code></td><td>string</td><td>PK</td></tr>
+      <tr><td><code>city_name</code></td><td>string</td><td>Renamed from <code>name</code></td></tr>
+      <tr><td><code>country</code></td><td>string</td><td></td></tr>
+      <tr><td><code>timezone</code></td><td>string</td><td></td></tr>
+      <tr><td><code>launched_at</code></td><td>timestamp</td><td></td></tr>
+    </table>
+    <details>
+      <summary>View SQL</summary>
+      <div class="code-wrap">
+        <pre><span class="kw">with</span> src <span class="kw">as</span> (
+    <span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ source('bronze', 'rideon_cities_raw') }}</span>
+),
+deduped <span class="kw">as</span> (
+    <span class="kw">select</span> *,
+        <span class="fn">row_number</span>() <span class="kw">over</span> (<span class="kw">partition by</span> city_id <span class="kw">order by</span> ingest_ts <span class="kw">desc</span>) <span class="kw">as</span> _rn
+    <span class="kw">from</span> src
+)
+<span class="kw">select</span> city_id, name <span class="kw">as</span> city_name, country, timezone, launched_at
+<span class="kw">from</span> deduped <span class="kw">where</span> _rn = <span class="num">1</span></pre>
+      </div>
+    </details>
+  </div>
+
+  <!-- stg_rideon__vehicle_categories -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">stg_rideon__vehicle_categories</span>
+      <span class="badge badge-ephemeral">ephemeral</span>
+    </div>
+    <p class="model-desc">Dedup-to-latest over <code>rideon_vehicle_categories_raw</code>. Exposes pricing rate columns.</p>
+    <table>
+      <tr><th>Column</th><th>Notes</th></tr>
+      <tr><td><code>category_id</code></td><td>PK</td></tr>
+      <tr><td><code>code</code></td><td>Short tier code (e.g. ECONOMY, PREMIUM)</td></tr>
+      <tr><td><code>display_name</code></td><td></td></tr>
+      <tr><td><code>base_fare</code></td><td>Fixed component</td></tr>
+      <tr><td><code>per_km_rate</code></td><td>Distance component</td></tr>
+      <tr><td><code>per_min_rate</code></td><td>Time component</td></tr>
+      <tr><td><code>min_fare</code></td><td>Floor fare</td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">with</span> src <span class="kw">as</span> (
+    <span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ source('bronze', 'rideon_vehicle_categories_raw') }}</span>
+),
+deduped <span class="kw">as</span> (
+    <span class="kw">select</span> *,
+        <span class="fn">row_number</span>() <span class="kw">over</span> (<span class="kw">partition by</span> category_id <span class="kw">order by</span> ingest_ts <span class="kw">desc</span>) <span class="kw">as</span> _rn
+    <span class="kw">from</span> src
+)
+<span class="kw">select</span> category_id, code, display_name, base_fare, per_km_rate, per_min_rate, min_fare
+<span class="kw">from</span> deduped <span class="kw">where</span> _rn = <span class="num">1</span></pre></div>
+    </details>
+  </div>
+
+  <!-- stg_rideon__drivers -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">stg_rideon__drivers</span>
+      <span class="badge badge-ephemeral">ephemeral</span>
+    </div>
+    <p class="model-desc">Dedup-to-latest over <code>rideon_drivers_raw</code>.</p>
+    <table>
+      <tr><th>Column</th><th>Notes</th></tr>
+      <tr><td><code>driver_id</code></td><td>PK</td></tr>
+      <tr><td><code>first_name</code>, <code>last_name</code></td><td></td></tr>
+      <tr><td><code>email</code>, <code>phone</code></td><td></td></tr>
+      <tr><td><code>city_id</code></td><td>FK → cities</td></tr>
+      <tr><td><code>license_number</code></td><td></td></tr>
+      <tr><td><code>status</code></td><td>Driver status (active/inactive/suspended)</td></tr>
+      <tr><td><code>rating</code></td><td>Current driver rating</td></tr>
+      <tr><td><code>onboarded_at</code></td><td></td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">with</span> src <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ source('bronze', 'rideon_drivers_raw') }}</span>),
+deduped <span class="kw">as</span> (
+    <span class="kw">select</span> *, <span class="fn">row_number</span>() <span class="kw">over</span> (<span class="kw">partition by</span> driver_id <span class="kw">order by</span> ingest_ts <span class="kw">desc</span>) <span class="kw">as</span> _rn
+    <span class="kw">from</span> src
+)
+<span class="kw">select</span> driver_id, first_name, last_name, email, phone, city_id,
+       license_number, status, rating, onboarded_at
+<span class="kw">from</span> deduped <span class="kw">where</span> _rn = <span class="num">1</span></pre></div>
+    </details>
+  </div>
+
+  <!-- stg_rideon__riders -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">stg_rideon__riders</span>
+      <span class="badge badge-ephemeral">ephemeral</span>
+    </div>
+    <p class="model-desc">Dedup-to-latest over <code>rideon_riders_raw</code>.</p>
+    <table>
+      <tr><th>Column</th><th>Notes</th></tr>
+      <tr><td><code>rider_id</code></td><td>PK</td></tr>
+      <tr><td><code>first_name</code>, <code>last_name</code></td><td></td></tr>
+      <tr><td><code>email</code>, <code>phone</code></td><td></td></tr>
+      <tr><td><code>city_id</code></td><td>FK → cities</td></tr>
+      <tr><td><code>rating</code></td><td>Current rider rating</td></tr>
+      <tr><td><code>created_at</code></td><td>Account creation timestamp</td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">with</span> src <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ source('bronze', 'rideon_riders_raw') }}</span>),
+deduped <span class="kw">as</span> (
+    <span class="kw">select</span> *, <span class="fn">row_number</span>() <span class="kw">over</span> (<span class="kw">partition by</span> rider_id <span class="kw">order by</span> ingest_ts <span class="kw">desc</span>) <span class="kw">as</span> _rn
+    <span class="kw">from</span> src
+)
+<span class="kw">select</span> rider_id, first_name, last_name, email, phone, city_id, rating, created_at
+<span class="kw">from</span> deduped <span class="kw">where</span> _rn = <span class="num">1</span></pre></div>
+    </details>
+  </div>
+
+  <!-- stg_rideon__vehicles -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">stg_rideon__vehicles</span>
+      <span class="badge badge-ephemeral">ephemeral</span>
+    </div>
+    <p class="model-desc">Dedup-to-latest over <code>rideon_vehicles_raw</code>. Links vehicles to drivers and categories.</p>
+    <table>
+      <tr><th>Column</th><th>Notes</th></tr>
+      <tr><td><code>vehicle_id</code></td><td>PK</td></tr>
+      <tr><td><code>driver_id</code></td><td>FK → drivers</td></tr>
+      <tr><td><code>category_id</code></td><td>FK → vehicle_categories</td></tr>
+      <tr><td><code>make</code>, <code>model</code>, <code>year</code></td><td>Vehicle specs</td></tr>
+      <tr><td><code>plate_number</code>, <code>color</code></td><td></td></tr>
+      <tr><td><code>registered_at</code></td><td></td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">with</span> src <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ source('bronze', 'rideon_vehicles_raw') }}</span>),
+deduped <span class="kw">as</span> (
+    <span class="kw">select</span> *, <span class="fn">row_number</span>() <span class="kw">over</span> (<span class="kw">partition by</span> vehicle_id <span class="kw">order by</span> ingest_ts <span class="kw">desc</span>) <span class="kw">as</span> _rn
+    <span class="kw">from</span> src
+)
+<span class="kw">select</span> vehicle_id, driver_id, category_id, make, model, year, plate_number, color, registered_at
+<span class="kw">from</span> deduped <span class="kw">where</span> _rn = <span class="num">1</span></pre></div>
+    </details>
+  </div>
+
+  <!-- stg_rideon__rides -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">stg_rideon__rides</span>
+      <span class="badge badge-ephemeral">ephemeral</span>
+    </div>
+    <p class="model-desc">Dedup-to-latest over <code>rideon_rides_raw</code>. Central event table — exposes all lifecycle timestamps, geo coordinates, and surge multiplier.</p>
+    <table>
+      <tr><th>Column</th><th>Notes</th></tr>
+      <tr><td><code>ride_id</code></td><td>PK</td></tr>
+      <tr><td><code>rider_id</code>, <code>driver_id</code></td><td>FKs</td></tr>
+      <tr><td><code>vehicle_id</code>, <code>city_id</code>, <code>category_id</code></td><td>FKs</td></tr>
+      <tr><td><code>status</code></td><td>requested / accepted / completed / cancelled</td></tr>
+      <tr><td><code>requested_at</code>, <code>accepted_at</code>, <code>started_at</code>, <code>completed_at</code></td><td>Lifecycle timestamps</td></tr>
+      <tr><td><code>pickup_lat</code>, <code>pickup_lng</code>, <code>dropoff_lat</code>, <code>dropoff_lng</code></td><td>Geo coordinates</td></tr>
+      <tr><td><code>distance_km</code>, <code>duration_min</code></td><td>Trip measures</td></tr>
+      <tr><td><code>surge_multiplier</code></td><td>Applied surge factor (1.0 = no surge)</td></tr>
+      <tr><td><code>cancelled_by</code></td><td>rider / driver / system (nullable)</td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">with</span> src <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ source('bronze', 'rideon_rides_raw') }}</span>),
+deduped <span class="kw">as</span> (
+    <span class="kw">select</span> *, <span class="fn">row_number</span>() <span class="kw">over</span> (<span class="kw">partition by</span> ride_id <span class="kw">order by</span> ingest_ts <span class="kw">desc</span>) <span class="kw">as</span> _rn
+    <span class="kw">from</span> src
+)
+<span class="kw">select</span>
+    ride_id, rider_id, driver_id, vehicle_id, city_id, category_id,
+    status, requested_at, accepted_at, started_at, completed_at,
+    pickup_lat, pickup_lng, dropoff_lat, dropoff_lng,
+    distance_km, duration_min, surge_multiplier,
+    cancelled_by, created_at, updated_at
+<span class="kw">from</span> deduped <span class="kw">where</span> _rn = <span class="num">1</span></pre></div>
+    </details>
+  </div>
+
+  <!-- stg_rideon__fares -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">stg_rideon__fares</span>
+      <span class="badge badge-ephemeral">ephemeral</span>
+    </div>
+    <p class="model-desc">Dedup-to-latest over <code>rideon_fares_raw</code>. One fare record per ride with component breakdown.</p>
+    <table>
+      <tr><th>Column</th><th>Notes</th></tr>
+      <tr><td><code>fare_id</code></td><td>PK</td></tr>
+      <tr><td><code>ride_id</code></td><td>FK → rides</td></tr>
+      <tr><td><code>base_fare</code></td><td>Fixed component</td></tr>
+      <tr><td><code>distance_fare</code></td><td>km × per_km_rate</td></tr>
+      <tr><td><code>time_fare</code></td><td>min × per_min_rate</td></tr>
+      <tr><td><code>surge_amount</code></td><td>Revenue from surge above base</td></tr>
+      <tr><td><code>discount</code></td><td>Applied discount (negative amount)</td></tr>
+      <tr><td><code>total_fare</code></td><td>Sum of all components</td></tr>
+      <tr><td><code>currency</code></td><td>ISO 4217 currency code</td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">with</span> src <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ source('bronze', 'rideon_fares_raw') }}</span>),
+deduped <span class="kw">as</span> (
+    <span class="kw">select</span> *, <span class="fn">row_number</span>() <span class="kw">over</span> (<span class="kw">partition by</span> fare_id <span class="kw">order by</span> ingest_ts <span class="kw">desc</span>) <span class="kw">as</span> _rn
+    <span class="kw">from</span> src
+)
+<span class="kw">select</span> fare_id, ride_id, base_fare, distance_fare, time_fare,
+       surge_amount, discount, total_fare, currency, created_at
+<span class="kw">from</span> deduped <span class="kw">where</span> _rn = <span class="num">1</span></pre></div>
+    </details>
+  </div>
+
+  <!-- stg_rideon__ratings -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">stg_rideon__ratings</span>
+      <span class="badge badge-ephemeral">ephemeral</span>
+    </div>
+    <p class="model-desc">Dedup-to-latest over <code>rideon_ratings_raw</code>. Bidirectional — riders rate drivers and drivers rate riders.</p>
+    <table>
+      <tr><th>Column</th><th>Notes</th></tr>
+      <tr><td><code>rating_id</code></td><td>PK</td></tr>
+      <tr><td><code>ride_id</code></td><td>FK → rides</td></tr>
+      <tr><td><code>rater_role</code></td><td><code>rider</code> or <code>driver</code></td></tr>
+      <tr><td><code>score</code></td><td>1–5 integer</td></tr>
+      <tr><td><code>comment</code></td><td>Optional free text</td></tr>
+      <tr><td><code>created_at</code></td><td></td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">with</span> src <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ source('bronze', 'rideon_ratings_raw') }}</span>),
+deduped <span class="kw">as</span> (
+    <span class="kw">select</span> *, <span class="fn">row_number</span>() <span class="kw">over</span> (<span class="kw">partition by</span> rating_id <span class="kw">order by</span> ingest_ts <span class="kw">desc</span>) <span class="kw">as</span> _rn
+    <span class="kw">from</span> src
+)
+<span class="kw">select</span> rating_id, ride_id, rater_role, score, comment, created_at
+<span class="kw">from</span> deduped <span class="kw">where</span> _rn = <span class="num">1</span></pre></div>
+    </details>
+  </div>
+
+  <!-- stg_rideon__ride_payments -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">stg_rideon__ride_payments</span>
+      <span class="badge badge-ephemeral">ephemeral</span>
+    </div>
+    <p class="model-desc">Dedup-to-latest over <code>rideon_ride_payments_raw</code>. Payment transaction per ride.</p>
+    <table>
+      <tr><th>Column</th><th>Notes</th></tr>
+      <tr><td><code>payment_id</code></td><td>PK</td></tr>
+      <tr><td><code>ride_id</code></td><td>FK → rides</td></tr>
+      <tr><td><code>rider_id</code></td><td>FK → riders</td></tr>
+      <tr><td><code>method</code></td><td>card / cash / wallet</td></tr>
+      <tr><td><code>amount</code></td><td>Charged amount</td></tr>
+      <tr><td><code>currency</code></td><td>ISO 4217</td></tr>
+      <tr><td><code>status</code></td><td>pending / captured / refunded / failed</td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">with</span> src <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ source('bronze', 'rideon_ride_payments_raw') }}</span>),
+deduped <span class="kw">as</span> (
+    <span class="kw">select</span> *, <span class="fn">row_number</span>() <span class="kw">over</span> (<span class="kw">partition by</span> payment_id <span class="kw">order by</span> ingest_ts <span class="kw">desc</span>) <span class="kw">as</span> _rn
+    <span class="kw">from</span> src
+)
+<span class="kw">select</span> payment_id, ride_id, rider_id, method, amount, currency, status, created_at, updated_at
+<span class="kw">from</span> deduped <span class="kw">where</span> _rn = <span class="num">1</span></pre></div>
+    </details>
+  </div>
+
+  <!-- stg_rideon__driver_payouts -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">stg_rideon__driver_payouts</span>
+      <span class="badge badge-ephemeral">ephemeral</span>
+    </div>
+    <p class="model-desc">Dedup-to-latest over <code>rideon_driver_payouts_raw</code>. One record per driver per payout date.</p>
+    <table>
+      <tr><th>Column</th><th>Notes</th></tr>
+      <tr><td><code>payout_id</code></td><td>PK</td></tr>
+      <tr><td><code>driver_id</code></td><td>FK → drivers</td></tr>
+      <tr><td><code>payout_date</code></td><td>Date of payout</td></tr>
+      <tr><td><code>gross_amount</code></td><td>Before commission deduction</td></tr>
+      <tr><td><code>commission</code></td><td>Platform fee</td></tr>
+      <tr><td><code>net_amount</code></td><td>Driver take-home</td></tr>
+      <tr><td><code>rides_count</code></td><td>Rides included in this payout</td></tr>
+      <tr><td><code>status</code></td><td>pending / paid / failed</td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">with</span> src <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ source('bronze', 'rideon_driver_payouts_raw') }}</span>),
+deduped <span class="kw">as</span> (
+    <span class="kw">select</span> *, <span class="fn">row_number</span>() <span class="kw">over</span> (<span class="kw">partition by</span> payout_id <span class="kw">order by</span> ingest_ts <span class="kw">desc</span>) <span class="kw">as</span> _rn
+    <span class="kw">from</span> src
+)
+<span class="kw">select</span> payout_id, driver_id, payout_date, gross_amount, commission,
+       net_amount, currency, rides_count, status
+<span class="kw">from</span> deduped <span class="kw">where</span> _rn = <span class="num">1</span></pre></div>
+    </details>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════ SILVER DIMS ═════════════════════ -->
+<section id="silver-dims">
+  <h2>Silver — Dimensions</h2>
+  <p>Six conformed dimensions in <code>nessie.silver</code>. All are <span class="badge badge-table">table</span> materialized as Iceberg tables. FKs from fact tables reference these dim PKs.</p>
+
+  <!-- dim_city -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">dim_city</span>
+      <span class="badge badge-dim">dimension</span>
+      <span class="badge badge-table">table</span>
+    </div>
+    <p class="model-desc">Service city dimension. Adds a <code>launched_date</code> date cast for easier partitioning downstream.</p>
+    <table>
+      <tr><th>Column</th><th>Test</th><th>Notes</th></tr>
+      <tr><td><code>city_id</code></td><td><code>unique</code> · <code>not_null</code></td><td>PK</td></tr>
+      <tr><td><code>city_name</code></td><td></td><td></td></tr>
+      <tr><td><code>country</code></td><td></td><td></td></tr>
+      <tr><td><code>timezone</code></td><td></td><td>IANA timezone string</td></tr>
+      <tr><td><code>launched_at</code></td><td></td><td>Timestamp</td></tr>
+      <tr><td><code>launched_date</code></td><td></td><td>Derived: <code>cast(launched_at as date)</code></td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">select</span>
+    city_id, city_name, country, timezone, launched_at,
+    <span class="fn">cast</span>(launched_at <span class="kw">as</span> date) <span class="kw">as</span> launched_date
+<span class="kw">from</span> <span class="ref">{{ ref('stg_rideon__cities') }}</span></pre></div>
+    </details>
+  </div>
+
+  <!-- dim_vehicle_category -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">dim_vehicle_category</span>
+      <span class="badge badge-dim">dimension</span>
+      <span class="badge badge-table">table</span>
+    </div>
+    <p class="model-desc">Service tier dimension with pricing rate attributes. Used in surge analysis and fare validation.</p>
+    <table>
+      <tr><th>Column</th><th>Test</th><th>Notes</th></tr>
+      <tr><td><code>category_id</code></td><td><code>unique</code> · <code>not_null</code></td><td>PK</td></tr>
+      <tr><td><code>code</code></td><td><code>not_null</code></td><td>Short tier identifier</td></tr>
+      <tr><td><code>display_name</code></td><td></td><td>Human-readable label</td></tr>
+      <tr><td><code>base_fare</code></td><td></td><td></td></tr>
+      <tr><td><code>per_km_rate</code></td><td></td><td></td></tr>
+      <tr><td><code>per_min_rate</code></td><td></td><td></td></tr>
+      <tr><td><code>min_fare</code></td><td></td><td>Minimum trip fare floor</td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">select</span>
+    category_id, code, display_name,
+    base_fare, per_km_rate, per_min_rate, min_fare
+<span class="kw">from</span> <span class="ref">{{ ref('stg_rideon__vehicle_categories') }}</span></pre></div>
+    </details>
+  </div>
+
+  <!-- dim_driver -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">dim_driver</span>
+      <span class="badge badge-dim">dimension</span>
+      <span class="badge badge-table">table</span>
+    </div>
+    <p class="model-desc">Driver dimension enriched with city attributes via left join. Computes <code>full_name</code> and <code>onboarded_date</code>.</p>
+    <table>
+      <tr><th>Column</th><th>Test</th><th>Notes</th></tr>
+      <tr><td><code>driver_id</code></td><td><code>unique</code> · <code>not_null</code></td><td>PK</td></tr>
+      <tr><td><code>first_name</code>, <code>last_name</code></td><td></td><td></td></tr>
+      <tr><td><code>full_name</code></td><td></td><td>Derived: <code>first_name || ' ' || last_name</code></td></tr>
+      <tr><td><code>email</code>, <code>phone</code></td><td></td><td></td></tr>
+      <tr><td><code>city_id</code></td><td></td><td>FK → dim_city</td></tr>
+      <tr><td><code>city_name</code>, <code>country</code></td><td></td><td>Denormalized from dim_city</td></tr>
+      <tr><td><code>license_number</code></td><td></td><td></td></tr>
+      <tr><td><code>status</code></td><td></td><td></td></tr>
+      <tr><td><code>rating</code></td><td></td><td>Current aggregate rating</td></tr>
+      <tr><td><code>onboarded_at</code></td><td></td><td>Timestamp</td></tr>
+      <tr><td><code>onboarded_date</code></td><td></td><td>Derived: <code>cast(onboarded_at as date)</code></td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">with</span> drivers <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ ref('stg_rideon__drivers') }}</span>),
+cities  <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ ref('stg_rideon__cities') }}</span>)
+<span class="kw">select</span>
+    d.driver_id, d.first_name, d.last_name,
+    d.first_name || <span class="str">' '</span> || d.last_name <span class="kw">as</span> full_name,
+    d.email, d.phone, d.city_id, c.city_name, c.country,
+    d.license_number, d.status, d.rating, d.onboarded_at,
+    <span class="fn">cast</span>(d.onboarded_at <span class="kw">as</span> date) <span class="kw">as</span> onboarded_date
+<span class="kw">from</span> drivers d
+<span class="kw">left join</span> cities c <span class="kw">on</span> d.city_id = c.city_id</pre></div>
+    </details>
+  </div>
+
+  <!-- dim_rider -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">dim_rider</span>
+      <span class="badge badge-dim">dimension</span>
+      <span class="badge badge-table">table</span>
+    </div>
+    <p class="model-desc">Rider dimension enriched with city attributes. Computes <code>full_name</code> and <code>signup_date</code>.</p>
+    <table>
+      <tr><th>Column</th><th>Test</th><th>Notes</th></tr>
+      <tr><td><code>rider_id</code></td><td><code>unique</code> · <code>not_null</code></td><td>PK</td></tr>
+      <tr><td><code>first_name</code>, <code>last_name</code></td><td></td><td></td></tr>
+      <tr><td><code>full_name</code></td><td></td><td>Derived: <code>first_name || ' ' || last_name</code></td></tr>
+      <tr><td><code>email</code>, <code>phone</code></td><td></td><td></td></tr>
+      <tr><td><code>city_id</code></td><td></td><td>FK → dim_city</td></tr>
+      <tr><td><code>city_name</code>, <code>country</code></td><td></td><td>Denormalized from dim_city</td></tr>
+      <tr><td><code>rating</code></td><td></td><td>Current aggregate rating</td></tr>
+      <tr><td><code>created_at</code></td><td></td><td>Account creation timestamp</td></tr>
+      <tr><td><code>signup_date</code></td><td></td><td>Derived: <code>cast(created_at as date)</code></td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">with</span> riders <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ ref('stg_rideon__riders') }}</span>),
+cities <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ ref('stg_rideon__cities') }}</span>)
+<span class="kw">select</span>
+    r.rider_id, r.first_name, r.last_name,
+    r.first_name || <span class="str">' '</span> || r.last_name <span class="kw">as</span> full_name,
+    r.email, r.phone, r.city_id, c.city_name, c.country,
+    r.rating, r.created_at,
+    <span class="fn">cast</span>(r.created_at <span class="kw">as</span> date) <span class="kw">as</span> signup_date
+<span class="kw">from</span> riders r
+<span class="kw">left join</span> cities c <span class="kw">on</span> r.city_id = c.city_id</pre></div>
+    </details>
+  </div>
+
+  <!-- dim_vehicle -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">dim_vehicle</span>
+      <span class="badge badge-dim">dimension</span>
+      <span class="badge badge-table">table</span>
+    </div>
+    <p class="model-desc">Vehicle dimension enriched with category tier attributes. Computes <code>make_model</code> display string.</p>
+    <table>
+      <tr><th>Column</th><th>Test</th><th>Notes</th></tr>
+      <tr><td><code>vehicle_id</code></td><td><code>unique</code> · <code>not_null</code></td><td>PK</td></tr>
+      <tr><td><code>driver_id</code></td><td></td><td>FK → dim_driver</td></tr>
+      <tr><td><code>category_id</code></td><td></td><td>FK → dim_vehicle_category</td></tr>
+      <tr><td><code>category_code</code></td><td></td><td>Denormalized: <code>code</code> from category</td></tr>
+      <tr><td><code>category_name</code></td><td></td><td>Denormalized: <code>display_name</code></td></tr>
+      <tr><td><code>make</code>, <code>model</code>, <code>year</code></td><td></td><td></td></tr>
+      <tr><td><code>make_model</code></td><td></td><td>Derived: <code>make || ' ' || model</code></td></tr>
+      <tr><td><code>plate_number</code>, <code>color</code></td><td></td><td></td></tr>
+      <tr><td><code>registered_at</code></td><td></td><td></td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">with</span> vehicles   <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ ref('stg_rideon__vehicles') }}</span>),
+categories <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ ref('stg_rideon__vehicle_categories') }}</span>)
+<span class="kw">select</span>
+    v.vehicle_id, v.driver_id, v.category_id,
+    cat.code         <span class="kw">as</span> category_code,
+    cat.display_name <span class="kw">as</span> category_name,
+    v.make, v.model,
+    v.make || <span class="str">' '</span> || v.model <span class="kw">as</span> make_model,
+    v.year, v.plate_number, v.color, v.registered_at
+<span class="kw">from</span> vehicles v
+<span class="kw">left join</span> categories cat <span class="kw">on</span> v.category_id = cat.category_id</pre></div>
+    </details>
+  </div>
+
+  <!-- dim_date -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">dim_date</span>
+      <span class="badge badge-dim">dimension</span>
+      <span class="badge badge-table">table</span>
+    </div>
+    <p class="model-desc">Date spine generated dynamically from the observed range of <code>requested_at</code> in rides. Uses Trino's <code>sequence()</code> + <code>unnest()</code> — no external packages required.</p>
+    <table>
+      <tr><th>Column</th><th>Test</th><th>Notes</th></tr>
+      <tr><td><code>date_day</code></td><td><code>unique</code> · <code>not_null</code></td><td>PK</td></tr>
+      <tr><td><code>year</code></td><td></td><td></td></tr>
+      <tr><td><code>quarter</code></td><td></td><td>1–4</td></tr>
+      <tr><td><code>month</code></td><td></td><td>1–12</td></tr>
+      <tr><td><code>day</code></td><td></td><td>Day of month</td></tr>
+      <tr><td><code>day_of_week</code></td><td></td><td>1=Mon … 7=Sun</td></tr>
+      <tr><td><code>day_name</code></td><td></td><td>Full weekday name (e.g. <code>Monday</code>)</td></tr>
+      <tr><td><code>iso_week</code></td><td></td><td>ISO week number</td></tr>
+      <tr><td><code>is_weekend</code></td><td></td><td>Boolean; true for day_of_week ∈ {6, 7}</td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">with</span> bounds <span class="kw">as</span> (
+    <span class="kw">select</span>
+        <span class="fn">cast</span>(<span class="fn">min</span>(requested_at) <span class="kw">as</span> date) <span class="kw">as</span> min_d,
+        <span class="fn">cast</span>(<span class="fn">max</span>(requested_at) <span class="kw">as</span> date) <span class="kw">as</span> max_d
+    <span class="kw">from</span> <span class="ref">{{ ref('stg_rideon__rides') }}</span>
+),
+spine <span class="kw">as</span> (
+    <span class="kw">select</span> d <span class="kw">as</span> date_day
+    <span class="kw">from</span> bounds
+    <span class="kw">cross join unnest</span>(<span class="fn">sequence</span>(bounds.min_d, bounds.max_d, <span class="kw">interval</span> <span class="str">'1'</span> day)) <span class="kw">as</span> t(d)
+)
+<span class="kw">select</span>
+    date_day,
+    <span class="fn">year</span>(date_day)                           <span class="kw">as</span> year,
+    <span class="fn">quarter</span>(date_day)                        <span class="kw">as</span> quarter,
+    <span class="fn">month</span>(date_day)                          <span class="kw">as</span> month,
+    <span class="fn">day</span>(date_day)                            <span class="kw">as</span> day,
+    <span class="fn">day_of_week</span>(date_day)                    <span class="kw">as</span> day_of_week,
+    <span class="fn">date_format</span>(date_day, <span class="str">'%W'</span>)              <span class="kw">as</span> day_name,
+    <span class="fn">week</span>(date_day)                           <span class="kw">as</span> iso_week,
+    <span class="fn">day_of_week</span>(date_day) <span class="kw">in</span> (<span class="num">6</span>, <span class="num">7</span>)          <span class="kw">as</span> is_weekend
+<span class="kw">from</span> spine</pre></div>
+    </details>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════ SILVER FACTS ════════════════════ -->
+<section id="silver-facts">
+  <h2>Silver — Facts</h2>
+  <p>Four fact tables in <code>nessie.silver</code>, each <span class="badge badge-table">table</span> materialized as Iceberg. All include FK references to the six Silver dims and denormalized boolean flags for common filter patterns.</p>
+
+  <!-- fact_rides -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">fact_rides</span>
+      <span class="badge badge-fact">fact</span>
+      <span class="badge badge-table">table</span>
+    </div>
+    <p class="model-desc">Grain: one row per ride. Central fact table. Joins rides with their fare breakdown; computes derived measures (<code>wait_min</code>, boolean flags).</p>
+    <table>
+      <tr><th>Column</th><th>Test</th><th>Notes</th></tr>
+      <tr><td><code>ride_id</code></td><td><code>unique</code> · <code>not_null</code></td><td>PK</td></tr>
+      <tr><td><code>ride_date</code></td><td></td><td>Derived: <code>cast(requested_at as date)</code></td></tr>
+      <tr><td><code>rider_id</code>, <code>driver_id</code></td><td></td><td>FK → dim_rider, dim_driver</td></tr>
+      <tr><td><code>vehicle_id</code>, <code>city_id</code>, <code>category_id</code></td><td></td><td>FKs to dims</td></tr>
+      <tr><td><code>status</code></td><td><code>accepted_values</code>: requested / accepted / completed / cancelled</td><td></td></tr>
+      <tr><td><code>cancelled_by</code></td><td></td><td>rider / driver / system (nullable)</td></tr>
+      <tr><td><code>requested_at</code>, <code>accepted_at</code>, <code>started_at</code>, <code>completed_at</code></td><td></td><td>Lifecycle timestamps</td></tr>
+      <tr><td><code>distance_km</code>, <code>duration_min</code></td><td></td><td>Trip measures</td></tr>
+      <tr><td><code>surge_multiplier</code></td><td></td><td></td></tr>
+      <tr><td><code>total_fare</code>, <code>surge_amount</code>, <code>discount</code></td><td></td><td>Rolled-up from fare staging</td></tr>
+      <tr><td><code>currency</code></td><td></td><td></td></tr>
+      <tr><td><code>wait_min</code></td><td></td><td>Derived: seconds(requested→accepted) / 60.0</td></tr>
+      <tr><td><code>is_completed</code></td><td></td><td>Boolean flag</td></tr>
+      <tr><td><code>is_cancelled</code></td><td></td><td>Boolean flag</td></tr>
+      <tr><td><code>is_surge</code></td><td></td><td><code>surge_multiplier &gt; 1.0</code></td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">with</span> rides <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ ref('stg_rideon__rides') }}</span>),
+fares <span class="kw">as</span> (
+    <span class="kw">select</span> ride_id, total_fare, surge_amount, discount, currency
+    <span class="kw">from</span> <span class="ref">{{ ref('stg_rideon__fares') }}</span>
+)
+<span class="kw">select</span>
+    r.ride_id,
+    <span class="fn">cast</span>(r.requested_at <span class="kw">as</span> date)                          <span class="kw">as</span> ride_date,
+    r.rider_id, r.driver_id, r.vehicle_id, r.city_id, r.category_id,
+    r.status, r.cancelled_by,
+    r.requested_at, r.accepted_at, r.started_at, r.completed_at,
+    r.distance_km, r.duration_min, r.surge_multiplier,
+    f.total_fare, f.surge_amount, f.discount, f.currency,
+    <span class="fn">date_diff</span>(<span class="str">'second'</span>, r.requested_at, r.accepted_at) / <span class="num">60.0</span> <span class="kw">as</span> wait_min,
+    (r.status = <span class="str">'completed'</span>)                               <span class="kw">as</span> is_completed,
+    (r.status = <span class="str">'cancelled'</span>)                               <span class="kw">as</span> is_cancelled,
+    (r.surge_multiplier > <span class="num">1.0</span>)                             <span class="kw">as</span> is_surge
+<span class="kw">from</span> rides r
+<span class="kw">left join</span> fares f <span class="kw">on</span> r.ride_id = f.ride_id</pre></div>
+    </details>
+  </div>
+
+  <!-- fact_ride_payments -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">fact_ride_payments</span>
+      <span class="badge badge-fact">fact</span>
+      <span class="badge badge-table">table</span>
+    </div>
+    <p class="model-desc">Grain: one row per payment transaction. Joins back to rides to inherit <code>driver_id</code>, <code>city_id</code>, <code>category_id</code>.</p>
+    <table>
+      <tr><th>Column</th><th>Test</th><th>Notes</th></tr>
+      <tr><td><code>payment_id</code></td><td><code>unique</code> · <code>not_null</code></td><td>PK</td></tr>
+      <tr><td><code>payment_date</code></td><td></td><td>Derived: <code>cast(created_at as date)</code></td></tr>
+      <tr><td><code>ride_id</code></td><td></td><td>FK → fact_rides</td></tr>
+      <tr><td><code>rider_id</code>, <code>driver_id</code></td><td></td><td>FKs to dims</td></tr>
+      <tr><td><code>city_id</code>, <code>category_id</code></td><td></td><td>Inherited from ride join</td></tr>
+      <tr><td><code>method</code></td><td></td><td>card / cash / wallet</td></tr>
+      <tr><td><code>amount</code>, <code>currency</code></td><td></td><td></td></tr>
+      <tr><td><code>status</code></td><td></td><td>pending / captured / refunded / failed</td></tr>
+      <tr><td><code>is_captured</code></td><td></td><td>Boolean flag</td></tr>
+      <tr><td><code>is_refunded</code></td><td></td><td>Boolean flag</td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">with</span> payments <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ ref('stg_rideon__ride_payments') }}</span>),
+rides <span class="kw">as</span> (
+    <span class="kw">select</span> ride_id, driver_id, city_id, category_id
+    <span class="kw">from</span> <span class="ref">{{ ref('stg_rideon__rides') }}</span>
+)
+<span class="kw">select</span>
+    p.payment_id,
+    <span class="fn">cast</span>(p.created_at <span class="kw">as</span> date) <span class="kw">as</span> payment_date,
+    p.ride_id, p.rider_id, r.driver_id, r.city_id, r.category_id,
+    p.method, p.amount, p.currency, p.status,
+    (p.status = <span class="str">'captured'</span>) <span class="kw">as</span> is_captured,
+    (p.status = <span class="str">'refunded'</span>) <span class="kw">as</span> is_refunded,
+    p.created_at, p.updated_at
+<span class="kw">from</span> payments p
+<span class="kw">left join</span> rides r <span class="kw">on</span> p.ride_id = r.ride_id</pre></div>
+    </details>
+  </div>
+
+  <!-- fact_ratings -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">fact_ratings</span>
+      <span class="badge badge-fact">fact</span>
+      <span class="badge badge-table">table</span>
+    </div>
+    <p class="model-desc">Grain: one row per rating event. Joins to rides to inherit participant and location FKs. <code>rater_role</code> distinguishes direction (rider rating driver vs. driver rating rider).</p>
+    <table>
+      <tr><th>Column</th><th>Test</th><th>Notes</th></tr>
+      <tr><td><code>rating_id</code></td><td><code>unique</code> · <code>not_null</code></td><td>PK</td></tr>
+      <tr><td><code>rating_date</code></td><td></td><td>Derived date</td></tr>
+      <tr><td><code>ride_id</code></td><td></td><td>FK → fact_rides</td></tr>
+      <tr><td><code>rider_id</code>, <code>driver_id</code></td><td></td><td>Inherited from ride</td></tr>
+      <tr><td><code>city_id</code>, <code>category_id</code></td><td></td><td>Inherited from ride</td></tr>
+      <tr><td><code>rater_role</code></td><td><code>accepted_values</code>: rider / driver</td><td></td></tr>
+      <tr><td><code>score</code></td><td></td><td>1–5 integer</td></tr>
+      <tr><td><code>comment</code></td><td></td><td>Optional</td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">with</span> ratings <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ ref('stg_rideon__ratings') }}</span>),
+rides <span class="kw">as</span> (
+    <span class="kw">select</span> ride_id, rider_id, driver_id, city_id, category_id
+    <span class="kw">from</span> <span class="ref">{{ ref('stg_rideon__rides') }}</span>
+)
+<span class="kw">select</span>
+    rt.rating_id,
+    <span class="fn">cast</span>(rt.created_at <span class="kw">as</span> date) <span class="kw">as</span> rating_date,
+    rt.ride_id, r.rider_id, r.driver_id, r.city_id, r.category_id,
+    rt.rater_role, rt.score, rt.comment, rt.created_at
+<span class="kw">from</span> ratings rt
+<span class="kw">left join</span> rides r <span class="kw">on</span> rt.ride_id = r.ride_id</pre></div>
+    </details>
+  </div>
+
+  <!-- fact_driver_payouts -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">fact_driver_payouts</span>
+      <span class="badge badge-fact">fact</span>
+      <span class="badge badge-table">table</span>
+    </div>
+    <p class="model-desc">Grain: one row per driver per payout day. Joins to drivers staging to inherit <code>city_id</code>. Computes <code>avg_fare_per_ride</code>.</p>
+    <table>
+      <tr><th>Column</th><th>Test</th><th>Notes</th></tr>
+      <tr><td><code>payout_id</code></td><td><code>unique</code> · <code>not_null</code></td><td>PK</td></tr>
+      <tr><td><code>payout_date</code></td><td></td><td></td></tr>
+      <tr><td><code>driver_id</code></td><td></td><td>FK → dim_driver</td></tr>
+      <tr><td><code>city_id</code></td><td></td><td>Inherited from driver staging</td></tr>
+      <tr><td><code>gross_amount</code></td><td></td><td>Before commission</td></tr>
+      <tr><td><code>commission</code></td><td></td><td>Platform fee deducted</td></tr>
+      <tr><td><code>net_amount</code></td><td></td><td>Driver take-home</td></tr>
+      <tr><td><code>currency</code></td><td></td><td></td></tr>
+      <tr><td><code>rides_count</code></td><td></td><td>Rides covered by this payout</td></tr>
+      <tr><td><code>status</code></td><td></td><td>pending / paid / failed</td></tr>
+      <tr><td><code>avg_fare_per_ride</code></td><td></td><td>Derived: <code>gross_amount / rides_count</code> (0 when rides_count=0)</td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">with</span> payouts <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ ref('stg_rideon__driver_payouts') }}</span>),
+drivers <span class="kw">as</span> (
+    <span class="kw">select</span> driver_id, city_id <span class="kw">from</span> <span class="ref">{{ ref('stg_rideon__drivers') }}</span>
+)
+<span class="kw">select</span>
+    po.payout_id, po.payout_date, po.driver_id, d.city_id,
+    po.gross_amount, po.commission, po.net_amount, po.currency,
+    po.rides_count, po.status,
+    <span class="kw">case when</span> po.rides_count > <span class="num">0</span>
+         <span class="kw">then</span> po.gross_amount / po.rides_count
+         <span class="kw">else</span> <span class="num">0</span> <span class="kw">end as</span> avg_fare_per_ride
+<span class="kw">from</span> payouts po
+<span class="kw">left join</span> drivers d <span class="kw">on</span> po.driver_id = d.driver_id</pre></div>
+    </details>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════ GOLD ══════════════════════════ -->
+<section id="gold">
+  <h2>Gold Marts</h2>
+  <p>Four pre-aggregated analytics marts in <code>nessie.gold</code>, each <span class="badge badge-table">table</span> materialized as Iceberg. Built from Silver dims and facts — no direct staging references.</p>
+
+  <!-- daily_city_performance -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">daily_city_performance</span>
+      <span class="badge badge-mart">mart</span>
+      <span class="badge badge-table">table</span>
+    </div>
+    <p class="model-desc">Grain: city × day. Demand, fulfilment rate, cancellation rate, revenue, and unique participant KPIs per city per day.</p>
+    <table>
+      <tr><th>Column</th><th>Notes</th></tr>
+      <tr><td><code>day</code></td><td>Partition date</td></tr>
+      <tr><td><code>city_id</code>, <code>city_name</code>, <code>country</code></td><td></td></tr>
+      <tr><td><code>total_rides</code></td><td></td></tr>
+      <tr><td><code>completed_rides</code></td><td></td></tr>
+      <tr><td><code>cancelled_rides</code></td><td></td></tr>
+      <tr><td><code>cancellation_rate_pct</code></td><td><code>100 × cancelled / total</code></td></tr>
+      <tr><td><code>gross_fare</code></td><td>Sum of total_fare for completed rides</td></tr>
+      <tr><td><code>avg_surge</code></td><td>Average surge_multiplier</td></tr>
+      <tr><td><code>avg_distance_km</code></td><td>Completed rides only</td></tr>
+      <tr><td><code>avg_duration_min</code></td><td>Completed rides only</td></tr>
+      <tr><td><code>unique_riders</code></td><td></td></tr>
+      <tr><td><code>unique_drivers</code></td><td></td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">with</span> rides  <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ ref('fact_rides') }}</span>),
+cities <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ ref('dim_city') }}</span>)
+<span class="kw">select</span>
+    r.ride_date                                                   <span class="kw">as</span> day,
+    r.city_id, c.city_name, c.country,
+    <span class="fn">count</span>(*)                                                      <span class="kw">as</span> total_rides,
+    <span class="fn">count_if</span>(r.is_completed)                                      <span class="kw">as</span> completed_rides,
+    <span class="fn">count_if</span>(r.is_cancelled)                                      <span class="kw">as</span> cancelled_rides,
+    <span class="fn">round</span>(<span class="num">100.0</span> * <span class="fn">count_if</span>(r.is_cancelled) / <span class="fn">count</span>(*), <span class="num">2</span>)       <span class="kw">as</span> cancellation_rate_pct,
+    <span class="fn">coalesce</span>(<span class="fn">sum</span>(r.total_fare), <span class="num">0</span>)                               <span class="kw">as</span> gross_fare,
+    <span class="fn">round</span>(<span class="fn">avg</span>(r.surge_multiplier), <span class="num">3</span>)                            <span class="kw">as</span> avg_surge,
+    <span class="fn">round</span>(<span class="fn">avg</span>(<span class="kw">case when</span> r.is_completed <span class="kw">then</span> r.distance_km <span class="kw">end</span>), <span class="num">2</span>) <span class="kw">as</span> avg_distance_km,
+    <span class="fn">round</span>(<span class="fn">avg</span>(<span class="kw">case when</span> r.is_completed <span class="kw">then</span> r.duration_min <span class="kw">end</span>), <span class="num">2</span>) <span class="kw">as</span> avg_duration_min,
+    <span class="fn">count</span>(<span class="kw">distinct</span> r.rider_id)                                   <span class="kw">as</span> unique_riders,
+    <span class="fn">count</span>(<span class="kw">distinct</span> r.driver_id)                                  <span class="kw">as</span> unique_drivers
+<span class="kw">from</span> rides r
+<span class="kw">left join</span> cities c <span class="kw">on</span> r.city_id = c.city_id
+<span class="kw">group by</span> r.ride_date, r.city_id, c.city_name, c.country</pre></div>
+    </details>
+  </div>
+
+  <!-- driver_earnings_daily -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">driver_earnings_daily</span>
+      <span class="badge badge-mart">mart</span>
+      <span class="badge badge-table">table</span>
+    </div>
+    <p class="model-desc">Grain: driver × day. Joins payouts with driver dim and daily ratings received (from riders). Enables driver performance and earnings reporting.</p>
+    <table>
+      <tr><th>Column</th><th>Notes</th></tr>
+      <tr><td><code>day</code></td><td>Payout date</td></tr>
+      <tr><td><code>driver_id</code></td><td></td></tr>
+      <tr><td><code>driver_name</code></td><td>From dim_driver.full_name</td></tr>
+      <tr><td><code>city_id</code>, <code>city_name</code></td><td></td></tr>
+      <tr><td><code>rides_count</code></td><td></td></tr>
+      <tr><td><code>gross_amount</code>, <code>commission</code>, <code>net_amount</code></td><td></td></tr>
+      <tr><td><code>avg_fare_per_ride</code></td><td></td></tr>
+      <tr><td><code>currency</code></td><td></td></tr>
+      <tr><td><code>avg_rating_received</code></td><td>Average score from riders on this day</td></tr>
+      <tr><td><code>ratings_received</code></td><td>Count of ratings received on this day</td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">with</span> payouts <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ ref('fact_driver_payouts') }}</span>),
+drivers <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ ref('dim_driver') }}</span>),
+ratings <span class="kw">as</span> (
+    <span class="kw">select</span>
+        driver_id, rating_date,
+        <span class="fn">avg</span>(<span class="fn">cast</span>(score <span class="kw">as</span> double)) <span class="kw">as</span> avg_rating_received,
+        <span class="fn">count</span>(*)                   <span class="kw">as</span> ratings_received
+    <span class="kw">from</span> <span class="ref">{{ ref('fact_ratings') }}</span>
+    <span class="kw">where</span> rater_role = <span class="str">'rider'</span>
+    <span class="kw">group by</span> driver_id, rating_date
+)
+<span class="kw">select</span>
+    po.payout_date                   <span class="kw">as</span> day,
+    po.driver_id, d.full_name        <span class="kw">as</span> driver_name,
+    d.city_id, d.city_name,
+    po.rides_count, po.gross_amount, po.commission,
+    po.net_amount, po.avg_fare_per_ride, po.currency,
+    rt.avg_rating_received, rt.ratings_received
+<span class="kw">from</span> payouts po
+<span class="kw">left join</span> drivers d  <span class="kw">on</span> po.driver_id = d.driver_id
+<span class="kw">left join</span> ratings rt <span class="kw">on</span> po.driver_id = rt.driver_id <span class="kw">and</span> po.payout_date = rt.rating_date</pre></div>
+    </details>
+  </div>
+
+  <!-- rider_lifetime_value -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">rider_lifetime_value</span>
+      <span class="badge badge-mart">mart</span>
+      <span class="badge badge-table">table</span>
+    </div>
+    <p class="model-desc">Grain: one row per rider (full recompute each run). Aggregates lifetime ride counts, spend, and behavioral metrics. Powers customer analytics and segmentation.</p>
+    <table>
+      <tr><th>Column</th><th>Notes</th></tr>
+      <tr><td><code>rider_id</code></td><td>PK</td></tr>
+      <tr><td><code>rider_name</code></td><td>From dim_rider.full_name</td></tr>
+      <tr><td><code>city_name</code>, <code>country</code></td><td></td></tr>
+      <tr><td><code>total_rides</code></td><td>Lifetime ride count</td></tr>
+      <tr><td><code>completed_rides</code></td><td></td></tr>
+      <tr><td><code>cancelled_rides</code></td><td></td></tr>
+      <tr><td><code>cancellation_rate_pct</code></td><td><code>100 × cancelled / total</code></td></tr>
+      <tr><td><code>total_spend</code></td><td>Sum of captured payments</td></tr>
+      <tr><td><code>avg_fare</code></td><td>Average captured payment amount</td></tr>
+      <tr><td><code>avg_distance_km</code></td><td>Completed rides only</td></tr>
+      <tr><td><code>first_ride_date</code></td><td></td></tr>
+      <tr><td><code>last_ride_date</code></td><td></td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">with</span> rides <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ ref('fact_rides') }}</span>),
+payments <span class="kw">as</span> (<span class="kw">select</span> rider_id, amount, status <span class="kw">from</span> <span class="ref">{{ ref('fact_ride_payments') }}</span>),
+riders  <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ ref('dim_rider') }}</span>),
+ride_agg <span class="kw">as</span> (
+    <span class="kw">select</span>
+        rider_id,
+        <span class="fn">count</span>(*)                                                     <span class="kw">as</span> total_rides,
+        <span class="fn">count_if</span>(is_completed)                                       <span class="kw">as</span> completed_rides,
+        <span class="fn">count_if</span>(is_cancelled)                                       <span class="kw">as</span> cancelled_rides,
+        <span class="fn">min</span>(ride_date)                                               <span class="kw">as</span> first_ride_date,
+        <span class="fn">max</span>(ride_date)                                               <span class="kw">as</span> last_ride_date,
+        <span class="fn">round</span>(<span class="fn">avg</span>(<span class="kw">case when</span> is_completed <span class="kw">then</span> distance_km <span class="kw">end</span>), <span class="num">2</span>)  <span class="kw">as</span> avg_distance_km
+    <span class="kw">from</span> rides <span class="kw">group by</span> rider_id
+),
+pay_agg <span class="kw">as</span> (
+    <span class="kw">select</span>
+        rider_id,
+        <span class="fn">coalesce</span>(<span class="fn">sum</span>(<span class="kw">case when</span> status = <span class="str">'captured'</span> <span class="kw">then</span> amount <span class="kw">end</span>), <span class="num">0</span>) <span class="kw">as</span> total_spend,
+        <span class="fn">round</span>(<span class="fn">avg</span>(<span class="kw">case when</span> status = <span class="str">'captured'</span> <span class="kw">then</span> amount <span class="kw">end</span>), <span class="num">2</span>)   <span class="kw">as</span> avg_fare
+    <span class="kw">from</span> payments <span class="kw">group by</span> rider_id
+)
+<span class="kw">select</span>
+    r.rider_id, rd.full_name <span class="kw">as</span> rider_name,
+    rd.city_name, rd.country,
+    r.total_rides, r.completed_rides, r.cancelled_rides,
+    <span class="fn">round</span>(<span class="num">100.0</span> * r.cancelled_rides / <span class="fn">nullif</span>(r.total_rides, <span class="num">0</span>), <span class="num">2</span>) <span class="kw">as</span> cancellation_rate_pct,
+    p.total_spend, p.avg_fare,
+    r.avg_distance_km, r.first_ride_date, r.last_ride_date
+<span class="kw">from</span> ride_agg r
+<span class="kw">left join</span> pay_agg p  <span class="kw">on</span> r.rider_id = p.rider_id
+<span class="kw">left join</span> riders rd  <span class="kw">on</span> r.rider_id = rd.rider_id</pre></div>
+    </details>
+  </div>
+
+  <!-- surge_pricing_analysis -->
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">surge_pricing_analysis</span>
+      <span class="badge badge-mart">mart</span>
+      <span class="badge badge-table">table</span>
+    </div>
+    <p class="model-desc">Grain: city × category × day. Surge prevalence, average/max multiplier, and revenue uplift from surge. Answers pricing effectiveness questions.</p>
+    <table>
+      <tr><th>Column</th><th>Notes</th></tr>
+      <tr><td><code>day</code></td><td></td></tr>
+      <tr><td><code>city_id</code>, <code>city_name</code></td><td></td></tr>
+      <tr><td><code>category_id</code>, <code>category_code</code></td><td></td></tr>
+      <tr><td><code>total_rides</code></td><td></td></tr>
+      <tr><td><code>surge_rides</code></td><td>Rides where <code>is_surge = true</code></td></tr>
+      <tr><td><code>surge_ride_pct</code></td><td><code>100 × surge_rides / total_rides</code></td></tr>
+      <tr><td><code>avg_surge_multiplier</code></td><td></td></tr>
+      <tr><td><code>max_surge_multiplier</code></td><td>Peak surge on this day/city/category</td></tr>
+      <tr><td><code>surge_revenue</code></td><td>Sum of surge_amount</td></tr>
+      <tr><td><code>gross_fare</code></td><td>Total fare including surge</td></tr>
+    </table>
+    <details><summary>View SQL</summary>
+      <div class="code-wrap"><pre><span class="kw">with</span> rides      <span class="kw">as</span> (<span class="kw">select</span> * <span class="kw">from</span> <span class="ref">{{ ref('fact_rides') }}</span>),
+cities     <span class="kw">as</span> (<span class="kw">select</span> city_id, city_name, country <span class="kw">from</span> <span class="ref">{{ ref('dim_city') }}</span>),
+categories <span class="kw">as</span> (<span class="kw">select</span> category_id, code, display_name <span class="kw">from</span> <span class="ref">{{ ref('dim_vehicle_category') }}</span>)
+<span class="kw">select</span>
+    r.ride_date                                               <span class="kw">as</span> day,
+    r.city_id, c.city_name,
+    r.category_id, cat.code                                   <span class="kw">as</span> category_code,
+    <span class="fn">count</span>(*)                                                  <span class="kw">as</span> total_rides,
+    <span class="fn">count_if</span>(r.is_surge)                                      <span class="kw">as</span> surge_rides,
+    <span class="fn">round</span>(<span class="num">100.0</span> * <span class="fn">count_if</span>(r.is_surge) / <span class="fn">count</span>(*), <span class="num">2</span>)       <span class="kw">as</span> surge_ride_pct,
+    <span class="fn">round</span>(<span class="fn">avg</span>(r.surge_multiplier), <span class="num">3</span>)                         <span class="kw">as</span> avg_surge_multiplier,
+    <span class="fn">round</span>(<span class="fn">max</span>(r.surge_multiplier), <span class="num">2</span>)                         <span class="kw">as</span> max_surge_multiplier,
+    <span class="fn">coalesce</span>(<span class="fn">sum</span>(r.surge_amount), <span class="num">0</span>)                          <span class="kw">as</span> surge_revenue,
+    <span class="fn">coalesce</span>(<span class="fn">sum</span>(r.total_fare), <span class="num">0</span>)                            <span class="kw">as</span> gross_fare
+<span class="kw">from</span> rides r
+<span class="kw">left join</span> cities c     <span class="kw">on</span> r.city_id = c.city_id
+<span class="kw">left join</span> categories cat <span class="kw">on</span> r.category_id = cat.category_id
+<span class="kw">group by</span> r.ride_date, r.city_id, c.city_name, r.category_id, cat.code</pre></div>
+    </details>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════ MACROS ════════════════════════ -->
+<section id="macros">
+  <h2>Macros</h2>
+
+  <div class="model-card">
+    <div class="model-header">
+      <span class="model-name">generate_schema_name</span>
+    </div>
+    <p class="model-desc">Overrides dbt's default schema name generation. dbt's default concatenates the target schema and the custom schema (e.g. <code>silver_gold</code>), which creates the wrong Nessie namespace. This macro maps <code>+schema: gold</code> directly to the namespace <code>gold</code>, and falls back to the target schema when no custom schema is set.</p>
+    <table>
+      <tr><th>Argument</th><th>Description</th></tr>
+      <tr><td><code>custom_schema_name</code></td><td>Value from <code>+schema:</code> in dbt_project.yml; <code>none</code> for models without an explicit schema</td></tr>
+      <tr><td><code>node</code></td><td>The dbt model node (unused in this implementation)</td></tr>
+    </table>
+    <table>
+      <tr><th>Input</th><th>Output</th></tr>
+      <tr><td><code>custom_schema_name = none</code></td><td><code>target.schema</code> (e.g. <code>silver</code>)</td></tr>
+      <tr><td><code>custom_schema_name = "gold"</code></td><td><code>gold</code></td></tr>
+      <tr><td><code>custom_schema_name = "silver"</code></td><td><code>silver</code></td></tr>
+    </table>
+    <div class="code-wrap">
+      <span class="code-label">macros/generate_schema_name.sql</span>
+      <pre><span class="cmt">{# Map dbt's schema name 1:1 to a Nessie Iceberg namespace. #}</span>
+{% macro generate_schema_name(custom_schema_name, node) -%}
+    {%- if custom_schema_name is none -%}
+        {{ target.schema }}
+    {%- else -%}
+        {{ custom_schema_name | trim }}
+    {%- endif -%}
+{%- endmacro %}</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════ TESTS ════════════════════════ -->
+<section id="tests">
+  <h2>Tests</h2>
+  <p>Data quality tests defined in <code>_silver__models.yml</code>. Run with <code>dbt test</code> or as part of <code>dbt build</code>.</p>
+
+  <table>
+    <tr><th>Model</th><th>Column</th><th>Test</th></tr>
+    <tr><td><code>dim_city</code></td><td><code>city_id</code></td><td><code>unique</code>, <code>not_null</code></td></tr>
+    <tr><td><code>dim_vehicle_category</code></td><td><code>category_id</code></td><td><code>unique</code>, <code>not_null</code></td></tr>
+    <tr><td><code>dim_vehicle_category</code></td><td><code>code</code></td><td><code>not_null</code></td></tr>
+    <tr><td><code>dim_rider</code></td><td><code>rider_id</code></td><td><code>unique</code>, <code>not_null</code></td></tr>
+    <tr><td><code>dim_driver</code></td><td><code>driver_id</code></td><td><code>unique</code>, <code>not_null</code></td></tr>
+    <tr><td><code>dim_vehicle</code></td><td><code>vehicle_id</code></td><td><code>unique</code>, <code>not_null</code></td></tr>
+    <tr><td><code>dim_date</code></td><td><code>date_day</code></td><td><code>unique</code>, <code>not_null</code></td></tr>
+    <tr><td><code>fact_rides</code></td><td><code>ride_id</code></td><td><code>unique</code>, <code>not_null</code></td></tr>
+    <tr><td><code>fact_rides</code></td><td><code>status</code></td><td><code>accepted_values</code>: requested, accepted, completed, cancelled</td></tr>
+    <tr><td><code>fact_ride_payments</code></td><td><code>payment_id</code></td><td><code>unique</code>, <code>not_null</code></td></tr>
+    <tr><td><code>fact_ratings</code></td><td><code>rating_id</code></td><td><code>unique</code>, <code>not_null</code></td></tr>
+    <tr><td><code>fact_ratings</code></td><td><code>rater_role</code></td><td><code>accepted_values</code>: rider, driver</td></tr>
+    <tr><td><code>fact_driver_payouts</code></td><td><code>payout_id</code></td><td><code>unique</code>, <code>not_null</code></td></tr>
+  </table>
+</section>
+
+</main>
+
+<script>
+  // Sidebar active link on scroll
+  const sections = document.querySelectorAll('section[id]');
+  const links = document.querySelectorAll('#sidebar nav a');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`#sidebar nav a[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+version: 2
+
+models:
+  - name: daily_city_performance
+    description: "Per city/day demand, fulfilment, and revenue KPIs."
+
+  - name: driver_earnings_daily
+    description: "Per driver/day earnings joined with ride activity and ratings."
+
+  - name: rider_lifetime_value
+    description: "Per rider lifetime ride and spend metrics (full recompute)."
+
+  - name: surge_pricing_analysis
+    description: "Per city/category/day surge prevalence and revenue uplift."

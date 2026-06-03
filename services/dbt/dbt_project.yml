@@ -1,0 +1,36 @@
+name: 'rideon'
+version: '0.1.0'
+config-version: 2
+
+profile: 'rideon'
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# Schema (namespace) creation is left to dbt: before a run it lists existing
+# schemas and creates only the missing ones, so the silver/gold namespaces are
+# created on a fresh catalog and skipped when they already exist. We do NOT use
+# an on-run-start `CREATE SCHEMA IF NOT EXISTS` hook — against Trino+Nessie that
+# statement is not reliably idempotent and errors with "Key '<ns>' already
+# exists" when the namespace is present.
+
+models:
+  rideon:
+    # Staging: thin dedup-to-latest-per-PK transforms over bronze. Ephemeral
+    # so they inline as CTEs into the silver models — no view objects created
+    # (avoids depending on Iceberg view support in the Nessie catalog).
+    staging:
+      +materialized: ephemeral
+    # Silver: Kimball star (dims + facts) as Iceberg tables in nessie.silver.
+    silver:
+      +materialized: table
+      +schema: silver
+    # Gold: aggregate marts as Iceberg tables in nessie.gold.
+    gold:
+      +materialized: table
+      +schema: gold

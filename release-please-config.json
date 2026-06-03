@@ -11,7 +11,8 @@
       "include-component-in-tag": false,
       "exclude-paths": [
         "services/data-generator",
-        "services/etl-app"
+        "services/etl-app",
+        "services/dbt"
       ]
     },
     "services/data-generator": {
@@ -23,6 +24,11 @@
       "package-name": "etl-app",
       "release-type": "python",
       "component": "etl-app"
+    },
+    "services/dbt": {
+      "package-name": "dbt",
+      "release-type": "simple",
+      "component": "dbt"
     }
   }
 }

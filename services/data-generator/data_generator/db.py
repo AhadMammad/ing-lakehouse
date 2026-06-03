@@ -27,6 +27,16 @@ def payments_exist_for_date(conn, date) -> int:
         return cur.fetchone()[0]
 
 
+def rides_exist_for_date(conn, date) -> int:
+    """Return ride count for `date` — used for the rideon idempotency check."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT COUNT(*) FROM rides WHERE requested_at::date = %s",
+            (date,),
+        )
+        return cur.fetchone()[0]
+
+
 def bulk_insert(conn, table: str, rows: list[tuple], columns: list[str]) -> None:
     if not rows:
         return

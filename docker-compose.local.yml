@@ -23,6 +23,7 @@ include:
   - services/cloudbeaver/docker-compose.singlenode.yml
   - services/airflow/docker-compose.yml
   - services/etl-app/docker-compose.yml
+  - services/dbt/docker-compose.yml
 
 networks:
   # Shared network — every service attaches to this so cross-service
