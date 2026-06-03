@@ -1,0 +1,72 @@
+version: 2
+
+models:
+  - name: dim_city
+    description: "City dimension (service areas)."
+    columns:
+      - name: city_id
+        tests: [unique, not_null]
+
+  - name: dim_vehicle_category
+    description: "Service tier dimension with pricing attributes."
+    columns:
+      - name: category_id
+        tests: [unique, not_null]
+      - name: code
+        tests: [not_null]
+
+  - name: dim_rider
+    description: "Rider dimension, enriched with city attributes."
+    columns:
+      - name: rider_id
+        tests: [unique, not_null]
+
+  - name: dim_driver
+    description: "Driver dimension, enriched with city attributes."
+    columns:
+      - name: driver_id
+        tests: [unique, not_null]
+
+  - name: dim_vehicle
+    description: "Vehicle dimension, enriched with category attributes."
+    columns:
+      - name: vehicle_id
+        tests: [unique, not_null]
+
+  - name: dim_date
+    description: "Date dimension spanning observed ride activity."
+    columns:
+      - name: date_day
+        tests: [unique, not_null]
+
+  - name: fact_rides
+    description: "Ride fact (grain = ride) with dim FKs and fare rollup."
+    columns:
+      - name: ride_id
+        tests: [unique, not_null]
+      - name: status
+        tests:
+          - accepted_values:
+              values: ['requested', 'accepted', 'completed', 'cancelled']
+
+  - name: fact_ride_payments
+    description: "Ride payment fact (grain = payment)."
+    columns:
+      - name: payment_id
+        tests: [unique, not_null]
+
+  - name: fact_ratings
+    description: "Rating fact (grain = rating event)."
+    columns:
+      - name: rating_id
+        tests: [unique, not_null]
+      - name: rater_role
+        tests:
+          - accepted_values:
+              values: ['rider', 'driver']
+
+  - name: fact_driver_payouts
+    description: "Driver payout fact (grain = driver/day)."
+    columns:
+      - name: payout_id
+        tests: [unique, not_null]

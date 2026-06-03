@@ -73,11 +73,16 @@ x-airflow-common:
     # passes the worker's env through to the child) — one source of truth.
     RUSTFS_ACCESS_KEY: "${RUSTFS_ACCESS_KEY:-rustfsadmin}"
     RUSTFS_SECRET_KEY: "${RUSTFS_SECRET_KEY:-rustfsadmin123}"
-    # Data generator image + postgres-source credentials for payments_seeder DAG.
+    # Data generator image + postgres-source credentials for the seeder DAGs.
     DATA_GENERATOR_IMAGE: "${COMPOSE_PROJECT_NAME:-ing-lakehouse}-data-generator:latest"
     POSTGRES_SOURCE_DB: "${POSTGRES_SOURCE_DB:-payments}"
     POSTGRES_SOURCE_USER: "${POSTGRES_SOURCE_USER:-payments}"
     POSTGRES_SOURCE_PASSWORD: "${POSTGRES_SOURCE_PASSWORD:-payments123}"
+    # dbt image + rideon source DB for the rideon_etl / rideon_source_seeder DAGs.
+    # The rideon DB shares the postgres-source container and credentials; only
+    # the database name differs (PG_DB=rideon).
+    DBT_IMAGE: "${COMPOSE_PROJECT_NAME:-ing-lakehouse}-dbt:latest"
+    RIDEON_SOURCE_DB: "${RIDEON_SOURCE_DB:-rideon}"
   volumes:
     - ./dags:/opt/airflow/dags:ro
     - airflow-logs:/opt/airflow/logs

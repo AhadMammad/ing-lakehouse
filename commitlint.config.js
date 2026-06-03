@@ -9,7 +9,7 @@ module.exports = {
     'scope-enum': [
       1,
       'always',
-      ['data-generator', 'etl-app', 'airflow', 'trino', 'iceberg', 'nessie', 'rustfs', 'kafka', 'jupyter', 'infra', 'docs', 'ci', 'deps'],
+      ['data-generator', 'etl-app', 'dbt', 'rideon', 'postgres', 'airflow', 'trino', 'iceberg', 'nessie', 'rustfs', 'kafka', 'jupyter', 'infra', 'docs', 'ci', 'deps'],
     ],
     'subject-case': [0],
   },

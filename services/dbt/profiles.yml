@@ -1,0 +1,20 @@
+# dbt-trino connection profile for the Rideon transforms.
+#
+# Templated from env vars injected by the DockerOperator / `make run-dbt`.
+# dbt needs ONLY a Trino connection — Trino's `nessie` iceberg catalog holds
+# the RustFS/Nessie write path, so no S3/AWS/Nessie credentials are needed.
+#
+# NOTE: the in-network Trino port is 8080 (8081 is only the host mapping).
+rideon:
+  target: prod
+  outputs:
+    prod:
+      type: trino
+      method: none
+      host: "{{ env_var('TRINO_HOST', 'trino') }}"
+      port: "{{ env_var('TRINO_PORT', '8080') | int }}"
+      user: "{{ env_var('TRINO_USER', 'dbt') }}"
+      catalog: "{{ env_var('TRINO_CATALOG', 'nessie') }}"
+      schema: "{{ env_var('TRINO_SCHEMA', 'silver') }}"
+      http_scheme: http
+      threads: 4

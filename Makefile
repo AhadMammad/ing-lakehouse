@@ -67,6 +67,13 @@ POSTGRES_SOURCE_PORT_VAR := $(or $(POSTGRES_SOURCE_PORT),5433)
 START ?= 2024-01-01
 END   ?= 2024-01-31
 ROWS  ?= 1000
+RIDES ?= 500                          # rides/day for run-rideon-generator
+
+# Rideon source DB name (second DB in the postgres-source container)
+RIDEON_SOURCE_DB := $(or $(RIDEON_SOURCE_DB),rideon)
+
+# dbt run selector (overridable): `make run-dbt SELECT='--select path:models/silver'`
+SELECT ?=
 
 .DEFAULT_GOAL := help
 .PHONY: help \
@@ -80,7 +87,8 @@ ROWS  ?= 1000
         nessie-init-bucket \
         jupyter-rebuild reset-events-table reset-nessie \
         build-etl-app logs-etl-app \
-        build-data-generator run-data-generator logs-postgres-source \
+        build-data-generator run-data-generator run-rideon-generator logs-postgres-source \
+        build-dbt run-dbt logs-dbt \
         setup-certs init-instance
 
 # ── Help ───────────────────────────────────────────────────────────
@@ -140,11 +148,14 @@ help:
 	@printf "  $(CYAN)jupyter-rebuild$(RESET)      $(DIM)Rebuild Jupyter image after Dockerfile changes$(RESET)\n"
 	@printf "  $(CYAN)build-etl-app$(RESET)        $(DIM)Build the etl-app image used by the weather/crypto DAGs$(RESET)\n"
 	@printf "  $(CYAN)build-data-generator$(RESET) $(DIM)Build the data-generator image for payments seeder$(RESET)\n"
-	@printf "  $(CYAN)run-data-generator$(RESET)   $(DIM)Seed postgres-source  (START=YYYY-MM-DD END=YYYY-MM-DD ROWS=N)$(RESET)\n"
+	@printf "  $(CYAN)run-data-generator$(RESET)   $(DIM)Seed payments DB  (START=YYYY-MM-DD END=YYYY-MM-DD ROWS=N)$(RESET)\n"
+	@printf "  $(CYAN)run-rideon-generator$(RESET) $(DIM)Seed rideon DB    (START=YYYY-MM-DD END=YYYY-MM-DD RIDES=N)$(RESET)\n"
+	@printf "  $(CYAN)build-dbt$(RESET)            $(DIM)Build the dbt image used by the rideon_etl DAG$(RESET)\n"
+	@printf "  $(CYAN)run-dbt$(RESET)              $(DIM)Build rideon silver/gold on Trino  (SELECT='--select ...')$(RESET)\n"
 	@printf "  $(CYAN)logs-postgres-source$(RESET) $(DIM)Stream postgres-source container logs$(RESET)\n"
 	@printf "  $(CYAN)reset-events-table$(RESET)   $(DIM)Drop demo.events + prune S3 prefix — replay 01–10 cleanly$(RESET)\n"
 	@printf "  $(RED)reset-nessie$(RESET)         $(DIM)Wipe Nessie state (volume) and re-init bucket  ⚠ destructive$(RESET)\n"
-	@printf "\n$(DIM)  Variables: INSTANCE=<name> (default: current user)  NODE=<container-name>  START/END/ROWS (data-generator)$(RESET)\n\n"
+	@printf "\n$(DIM)  Variables: INSTANCE=<name> (default: current user)  NODE=<container-name>  START/END/ROWS/RIDES (generators)$(RESET)\n\n"
 
 # ── Multi-instance init ────────────────────────────────────────────
 init-instance:
@@ -577,9 +588,49 @@ run-data-generator:
 		--rows-per-day $(ROWS)
 	@printf "$(GREEN)✔  Data generation complete.$(RESET)\n"
 
+run-rideon-generator:
+	@printf "$(BOLD)$(CYAN)▶  Running rideon generator: $(START) → $(END) ($(RIDES) rides/day) [instance: $(INSTANCE)]...$(RESET)\n"
+	@docker run --rm \
+		--network $(NETWORK_NAME) \
+		-e PG_HOST=postgres-source \
+		-e PG_PORT=5432 \
+		-e PG_DB=$(RIDEON_SOURCE_DB) \
+		-e PG_USER=$(POSTGRES_SOURCE_USER) \
+		-e PG_PASSWORD=$(POSTGRES_SOURCE_PASSWORD) \
+		$(PROJECT_NAME)-data-generator:latest \
+		data_generator.rideon \
+		--start-date $(START) \
+		--end-date $(END) \
+		--rides-per-day $(RIDES)
+	@printf "$(GREEN)✔  Rideon data generation complete.$(RESET)\n"
+
 logs-postgres-source:
 	@printf "$(BOLD)$(BLUE)▶  Streaming postgres-source logs (Ctrl-C to exit)...$(RESET)\n"
 	@$(COMPOSE_LOCAL) logs -f --tail=100 postgres-source
+
+# ── dbt build & run (Rideon silver/gold on Trino) ──────────────────
+build-dbt:
+	@printf "$(BOLD)$(CYAN)▶  Building dbt image [instance: $(INSTANCE)]...$(RESET)\n"
+	@$(COMPOSE_LOCAL) --profile build-only build dbt
+	@printf "$(GREEN)✔  Built $(PROJECT_NAME)-dbt:latest$(RESET)\n"
+	@printf "$(DIM)   Run models: make run-dbt  (or SELECT='--select path:models/silver')$(RESET)\n"
+
+run-dbt:
+	@printf "$(BOLD)$(CYAN)▶  Running dbt build $(SELECT) [instance: $(INSTANCE)]...$(RESET)\n"
+	@docker run --rm \
+		--network $(NETWORK_NAME) \
+		-e TRINO_HOST=trino \
+		-e TRINO_PORT=8080 \
+		-e TRINO_USER=dbt \
+		-e TRINO_CATALOG=nessie \
+		-e TRINO_SCHEMA=silver \
+		$(PROJECT_NAME)-dbt:latest \
+		build $(SELECT) --target prod
+	@printf "$(GREEN)✔  dbt build complete.$(RESET)\n"
+
+logs-dbt:
+	@printf "$(BOLD)$(BLUE)▶  Streaming dbt build logs (Ctrl-C to exit)...$(RESET)\n"
+	@$(COMPOSE_LOCAL) --profile build-only logs -f --tail=100 dbt || true
 
 reset-nessie:
 	@printf "$(BOLD)$(RED)⚠  Wiping all Nessie state for instance '$(INSTANCE)' — every catalog ref, branch, and tag will be lost.$(RESET)\n"
