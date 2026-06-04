@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/AhadMammad/ing-lakehouse/compare/v0.2.0...v0.3.0) (2026-06-04)
+
+
+### Features
+
+* **airflow:** add Telegram DAG notifications, plus Nessie cred and init-instance fixes ([#23](https://github.com/AhadMammad/ing-lakehouse/issues/23)) ([af265c4](https://github.com/AhadMammad/ing-lakehouse/commit/af265c487cab6fe7e31d982b847bfbeedafcb823))
+
 ## [0.2.0](https://github.com/AhadMammad/ing-lakehouse/compare/v0.1.0...v0.2.0) (2026-06-04)
 
 
