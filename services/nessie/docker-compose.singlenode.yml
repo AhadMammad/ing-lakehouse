@@ -17,6 +17,12 @@ services:
     environment:
       QUARKUS_HTTP_PORT: "19120"
       QUARKUS_MANAGEMENT_PORT: "9001"
+      # S3/RustFS root creds for Nessie's catalog-side S3 client. Consumed by
+      # config/application.properties via ${RUSTFS_ACCESS_KEY} expansion so the
+      # catalog authenticates to RustFS with the SAME keys the rest of the stack
+      # uses (one source of truth in .env). Defaults match the stack-wide default.
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin123}
     ports:
       - "${NESSIE_PORT:-19120}:19120"
     volumes:

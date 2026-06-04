@@ -184,7 +184,7 @@ init-instance:
 	SUBNET_IDX=$$(( $$(id -u) % 253 + 1 )); \
 	SUBNET="10.100.$${SUBNET_IDX}.0/24"; \
 	{ printf "COMPOSE_PROJECT_NAME=ing-lakehouse-$$INSTANCE\n\n"; \
-	  grep -v "^COMPOSE_PROJECT_NAME" .env; } > "$$ENV_FILE"; \
+	  grep -v "^COMPOSE_PROJECT_NAME" .env.example; } > "$$ENV_FILE"; \
 	sed -i "s|^RUSTFS_S3_PORT=.*|RUSTFS_S3_PORT=$$S3|" "$$ENV_FILE"; \
 	sed -i "s|^RUSTFS_CONSOLE_PORT=.*|RUSTFS_CONSOLE_PORT=$$CON|" "$$ENV_FILE"; \
 	sed -i "s|^SPARK_MASTER_UI_PORT=.*|SPARK_MASTER_UI_PORT=$$SPUI|" "$$ENV_FILE"; \

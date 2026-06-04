@@ -1,4 +1,12 @@
-# Email Alerting
+# Alerting
+
+DAGs send failure / success alerts over two channels that fire side by side:
+**email** (captured by Mailpit) and **Telegram** (posted to a channel via a bot).
+Both are opt-in per DAG and driven by callbacks in `dags/`. The four scheduled ETL
+DAGs — `crypto_etl`, `weather_etl`, `payments_etl`, `rideon_etl` — are wired with
+both. The [Telegram section](#telegram) is at the bottom.
+
+## Email
 
 DAGs send failure / success alerts by email. Mail is captured by **Mailpit**, a
 lightweight open-source SMTP sink that ships with the stack — it does **not**
@@ -51,9 +59,10 @@ with DAG(
     ...
 ```
 
-`crypto_etl.py` and `weather_etl.py` are wired as the reference examples. To
-alert only a specific task, pass the same callback to that operator instead of
-the DAG.
+The four ETL DAGs (`crypto_etl`, `weather_etl`, `payments_etl`, `rideon_etl`) are
+wired as the reference examples — each passes a **list** of callbacks so the email
+and Telegram notifiers both fire. To alert only a specific task, pass the same
+callback to that operator instead of the DAG.
 
 To override recipients for one DAG: `alert_on_failure(to=["oncall@lakehouse.local"])`.
 
@@ -68,3 +77,72 @@ Mailpit only captures mail. To deliver to real inboxes, repoint the
 `smtp_default` connection at a real relay (SendGrid / SES / Gmail app password)
 in `.env` / the Airflow compose file — **no DAG changes needed**, since alerting
 flows through `smtp_default`.
+
+## Telegram
+
+Alongside email, the ETL DAGs post failure / success alerts to a **Telegram
+channel** via a bot. Unlike email there is no in-network sink — messages go
+straight to Telegram's Bot API and land in your real channel.
+
+### Telegram topology
+
+```text
+DAG callback ──▶ TelegramHook ──▶ Telegram Bot API ──▶ your channel / group
+                 (dags/_telegram_notifiers.py)
+```
+
+- The **telegram provider** (`apache-airflow-providers-telegram`) is installed in
+  [services/airflow/Dockerfile](../../services/airflow/Dockerfile); it supplies
+  `TelegramHook`. (The version pinned for Airflow 3.2.1 ships no `Notifier`
+  class, so the helper posts through the hook inside a plain callback.)
+- Credentials come from the worker env: `TELEGRAM_BOT_TOKEN` and
+  `TELEGRAM_CHAT_ID`, set in
+  [services/airflow/docker-compose.yml](../../services/airflow/docker-compose.yml)
+  and sourced from `.env.<instance>`. They are passed **straight to the notifier**
+  — no `AIRFLOW_CONN_*` connection, because the bot token's `:` breaks the
+  URI-connection form (this mirrors how `_notifiers.py` reads `ALERT_EMAIL_*`).
+
+### Getting the bot credentials
+
+1. Message **@BotFather** on Telegram → `/newbot` → copy the **bot token**.
+2. Add the bot to the target channel/group (as admin for a channel), then get the
+   **chat id** (e.g. via `@userinfobot`, or the `getUpdates` API). Channel ids look
+   like `-100…`.
+3. Fill both into `.env.<username>` after `make init-instance`:
+
+   ```bash
+   TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
+   TELEGRAM_CHAT_ID=-1001234567890
+   ```
+
+   Left blank, the Telegram callback simply no-ops (the send errors and Airflow
+   catches it) — the email alert and the task's own state are unaffected.
+
+### The Telegram notifier helper
+
+[services/airflow/dags/_telegram_notifiers.py](../../services/airflow/dags/_telegram_notifiers.py)
+mirrors `_notifiers.py` and exposes two callbacks:
+
+- `telegram_alert_on_failure()` → ❌ message when a task fails.
+- `telegram_alert_on_success()` → ✅ message when a DAG run succeeds.
+
+### Opting a DAG into Telegram
+
+Import both helpers and pass a **list** of callbacks so email and Telegram fire
+together:
+
+```python
+from _notifiers import alert_on_failure, alert_on_success
+from _telegram_notifiers import telegram_alert_on_failure, telegram_alert_on_success
+
+with DAG(
+    dag_id="my_etl",
+    ...
+    on_failure_callback=[alert_on_failure(), telegram_alert_on_failure()],
+    on_success_callback=[alert_on_success(), telegram_alert_on_success()],
+) as dag:
+    ...
+```
+
+To send to a different channel for one DAG:
+`telegram_alert_on_failure(chat_id="-100...")`.

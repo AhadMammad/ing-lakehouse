@@ -73,6 +73,13 @@ x-airflow-common:
     ALERT_EMAIL_ADMIN: "${ALERT_EMAIL_ADMIN:-admin@lakehouse.local}"
     ALERT_EMAIL_DATATEAM: "${ALERT_EMAIL_DATATEAM:-datateam@lakehouse.local}"
     AIRFLOW_SMTP_FROM: "${AIRFLOW_SMTP_FROM:-airflow@lakehouse.local}"
+    # Telegram alerting creds read by dags/_telegram_notifiers.py. Supplied per
+    # instance in .env.<user>; blank default keeps a fresh clone parseable —
+    # a missing token only no-ops the telegram callback, the email alert still
+    # fires. Passed straight to TelegramHook (no AIRFLOW_CONN_* — the bot
+    # token's ':' breaks the connection-URI form).
+    TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"
+    TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID:-}"
     # ETL-app image + network name resolved at compose parse time from the
     # active .env.<instance> so each user's stack stays isolated. Workers
     # read these to spawn ephemeral containers via DockerOperator.

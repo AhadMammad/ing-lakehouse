@@ -14,6 +14,7 @@ from airflow.providers.docker.operators.docker import DockerOperator
 from airflow.sdk import DAG
 
 from _notifiers import alert_on_failure, alert_on_success
+from _telegram_notifiers import telegram_alert_on_failure, telegram_alert_on_success
 
 # Resolved per-instance by Compose substitution into the worker's env
 # (see services/airflow/docker-compose.yml x-airflow-common.environment).
@@ -44,8 +45,8 @@ with DAG(
     max_active_runs=1,
     tags=["weather", "lakehouse", "medallion"],
     description="Open-Meteo Baku → bronze/silver/gold Iceberg tables",
-    on_failure_callback=alert_on_failure(),
-    on_success_callback=alert_on_success(),
+    on_failure_callback=[alert_on_failure(), telegram_alert_on_failure()],
+    on_success_callback=[alert_on_success(), telegram_alert_on_success()],
 ) as dag:
     bronze = DockerOperator(
         task_id="bronze",
