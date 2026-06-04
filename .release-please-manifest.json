@@ -1,5 +1,5 @@
 {
-  ".": "0.2.0",
+  ".": "0.3.0",
   "services/data-generator": "0.2.0",
   "services/etl-app": "0.2.0",
   "services/dbt": "0.2.0"
