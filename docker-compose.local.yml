@@ -22,6 +22,7 @@ include:
   - services/trino/docker-compose.singlenode.yml
   - services/cloudbeaver/docker-compose.singlenode.yml
   - services/airflow/docker-compose.yml
+  - services/mailserver/docker-compose.yml
   - services/etl-app/docker-compose.yml
   - services/dbt/docker-compose.yml
 
