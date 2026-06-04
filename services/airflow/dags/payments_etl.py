@@ -21,6 +21,9 @@ from datetime import datetime
 from airflow.providers.docker.operators.docker import DockerOperator
 from airflow.sdk import DAG, TaskGroup
 
+from _notifiers import alert_on_failure, alert_on_success
+from _telegram_notifiers import telegram_alert_on_failure, telegram_alert_on_success
+
 ETL_IMAGE = os.environ["ETL_APP_IMAGE"]
 NETWORK = os.environ["LAKEHOUSE_NETWORK"]
 
@@ -64,6 +67,8 @@ with DAG(
     max_active_runs=1,
     tags=["payments", "lakehouse", "medallion"],
     description="postgres-source payments → bronze/silver(star)/gold Iceberg tables",
+    on_failure_callback=[alert_on_failure(), telegram_alert_on_failure()],
+    on_success_callback=[alert_on_success(), telegram_alert_on_success()],
 ) as dag:
 
     with TaskGroup(group_id="bronze") as bronze:

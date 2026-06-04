@@ -118,19 +118,24 @@ gitGraph
 
 ## Credential Configuration
 
-Nessie's internal S3 client (used for validating table locations and writing catalog-side metadata) uses **Quarkus-native URN secrets**, not standard `AWS_*` environment variables.
+Nessie's internal S3 client (used for validating table locations and writing catalog-side metadata) uses **Quarkus-native URN secrets**, not standard `AWS_*` environment variables. The secret *values*, however, are expanded from the same `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY` env vars the rest of the stack uses, so the catalog never drifts out of sync with RustFS.
 
 ```mermaid
 flowchart TD
+    ENV["RUSTFS_ACCESS_KEY / RUSTFS_SECRET_KEY<br/>(.env → nessie compose env)"]
     PROP["application.properties"]
     PROP --> URN["nessie.catalog.service.s3.default-options.access-key<br/>= urn:nessie-secret:quarkus:rustfs-creds"]
-    URN --> NAME["rustfs-creds.name = rustfsadmin"]
-    URN --> SEC["rustfs-creds.secret = rustfsadmin123"]
+    URN --> NAME["rustfs-creds.name = ${RUSTFS_ACCESS_KEY:rustfsadmin}"]
+    URN --> SEC["rustfs-creds.secret = ${RUSTFS_SECRET_KEY:rustfsadmin123}"]
+    ENV --> NAME
+    ENV --> SEC
 ```
 
 The `urn:nessie-secret:quarkus:<prefix>` syntax tells Nessie's secret resolver to look for `<prefix>.name` and `<prefix>.secret` keys in the same config file. This is the format documented in Nessie's own built-in `application.properties` (inside the JAR).
 
-Standard `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` env vars are **not** picked up by Nessie's catalog S3 client.
+Those two keys use Quarkus property expansion (`${RUSTFS_ACCESS_KEY:rustfsadmin}`), resolved from the `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY` env vars passed into the `nessie` service ([services/nessie/docker-compose.singlenode.yml](../../services/nessie/docker-compose.singlenode.yml)), falling back to the `rustfsadmin` / `rustfsadmin123` defaults when unset. This is why a custom `RUSTFS_*` value in `.env` works end-to-end: RustFS, the etl-app/Trino/Jupyter clients, **and** Nessie all read the one source of truth. (Before this, the creds were hardcoded to `rustfsadmin`, so any other `RUSTFS_*` value produced a `403 Forbidden` from RustFS on table creation.)
+
+Standard `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` env vars are still **not** picked up directly by Nessie's catalog S3 client — only the `RUSTFS_*`-derived URN secret above.
 
 ---
 
