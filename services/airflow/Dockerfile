@@ -7,7 +7,9 @@ ARG PYTHON_VERSION=3.13
 # Add the providers the docs assume. The base apache/airflow:3.2.1 image
 # does not ship apache-spark or trino — every SparkSubmitOperator /
 # TrinoHook / SQLExecuteQueryOperator(conn_id="trino_default") example in
-# docs/airflow/ requires these to even import.
+# docs/airflow/ requires these to even import. The smtp provider supplies
+# SmtpHook / SmtpNotifier used by the email alerting helper
+# (dags/_notifiers.py) against the Mailpit smtp_default connection.
 #
 # Pinning against the official constraint file keeps provider versions
 # compatible with the airflow core version in the FROM tag.
@@ -15,6 +17,7 @@ RUN pip install --no-cache-dir \
       "apache-airflow-providers-apache-spark" \
       "apache-airflow-providers-trino" \
       "apache-airflow-providers-docker" \
+      "apache-airflow-providers-smtp" \
       --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt"
 
 # SparkSubmitOperator requires `spark-submit` on PATH and a JRE. This image

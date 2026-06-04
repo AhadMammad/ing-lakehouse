@@ -19,6 +19,7 @@ include:
   - services/trino/docker-compose.singlenode.yml
   - services/cloudbeaver/docker-compose.singlenode.yml
   - services/airflow/docker-compose.yml
+  - services/mailserver/docker-compose.yml
 
 networks:
   # Shared network — every service attaches to this so cross-service

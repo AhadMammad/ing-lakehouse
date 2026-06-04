@@ -47,7 +47,7 @@ BATCH_SERVICES := rustfs nessie jupyter trino cloudbeaver \
                   airflow-postgres airflow-redis airflow-init \
                   airflow-apiserver airflow-scheduler airflow-dag-processor \
                   airflow-triggerer airflow-worker-1 airflow-worker-2 \
-                  docker-socket-proxy postgres-source
+                  docker-socket-proxy postgres-source mailpit
 
 # Derive display variables from whichever env file is active
 S3_PORT      := $(or $(RUSTFS_S3_PORT),9000)
@@ -62,6 +62,7 @@ TRINO_PORT_VAR           := $(or $(TRINO_PORT),8081)
 HUE_PORT_VAR             := $(or $(HUE_PORT),8000)
 AIRFLOW_PORT_VAR         := $(or $(AIRFLOW_PORT),8082)
 POSTGRES_SOURCE_PORT_VAR := $(or $(POSTGRES_SOURCE_PORT),5433)
+MAILPIT_UI_PORT_VAR      := $(or $(MAILPIT_UI_PORT),8025)
 
 # Convenience vars for run-data-generator (overridable on command line)
 START ?= 2024-01-01
@@ -178,6 +179,8 @@ init-instance:
 	HUE=$$(echo "$$PORTS"  | awk '{print $$9}'); \
 	AIR=$$(echo "$$PORTS"  | awk '{print $$10}'); \
 	PG=$$(echo "$$PORTS"   | awk '{print $$11}'); \
+	MPUI=$$(echo "$$PORTS" | awk '{print $$12}'); \
+	MPSMTP=$$(echo "$$PORTS"| awk '{print $$13}'); \
 	SUBNET_IDX=$$(( $$(id -u) % 253 + 1 )); \
 	SUBNET="10.100.$${SUBNET_IDX}.0/24"; \
 	{ printf "COMPOSE_PROJECT_NAME=ing-lakehouse-$$INSTANCE\n\n"; \
@@ -193,6 +196,8 @@ init-instance:
 	sed -i "s|^HUE_PORT=.*|HUE_PORT=$$HUE|" "$$ENV_FILE"; \
 	sed -i "s|^AIRFLOW_PORT=.*|AIRFLOW_PORT=$$AIR|" "$$ENV_FILE"; \
 	sed -i "s|^POSTGRES_SOURCE_PORT=.*|POSTGRES_SOURCE_PORT=$$PG|" "$$ENV_FILE"; \
+	sed -i "s|^MAILPIT_UI_PORT=.*|MAILPIT_UI_PORT=$$MPUI|" "$$ENV_FILE"; \
+	sed -i "s|^MAILPIT_SMTP_PORT=.*|MAILPIT_SMTP_PORT=$$MPSMTP|" "$$ENV_FILE"; \
 	sed -i "s|^NETWORK_SUBNET=.*|NETWORK_SUBNET=$$SUBNET|" "$$ENV_FILE"; \
 	printf "$(GREEN)✔  Created $$ENV_FILE$(RESET)\n"; \
 	printf "$(DIM)   Project    → ing-lakehouse-$$INSTANCE$(RESET)\n"; \
@@ -206,6 +211,7 @@ init-instance:
 	printf "$(DIM)   Hue        → :$$HUE$(RESET)\n"; \
 	printf "$(DIM)   Airflow    → :$$AIR$(RESET)\n"; \
 	printf "$(DIM)   PostgreSQL → :$$PG$(RESET)\n"; \
+	printf "$(DIM)   Mailpit    → :$$MPUI  SMTP → :$$MPSMTP$(RESET)\n"; \
 	printf "\n$(DIM)   Next: make up$(RESET)\n"
 
 # ── Lifecycle: local ───────────────────────────────────────────────
@@ -222,6 +228,7 @@ up:
 	@printf "$(DIM)   Trino UI     → http://localhost:$(TRINO_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   CloudBeaver  → http://localhost:$(HUE_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   Airflow UI   → http://localhost:$(AIRFLOW_PORT_VAR)$(RESET)\n"
+	@printf "$(DIM)   Mailpit      → http://localhost:$(MAILPIT_UI_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   PostgreSQL   → localhost:$(POSTGRES_SOURCE_PORT_VAR)  (payments / payments123)$(RESET)\n"
 
 up-batch:
@@ -235,6 +242,7 @@ up-batch:
 	@printf "$(DIM)   Trino UI     → http://localhost:$(TRINO_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   CloudBeaver  → http://localhost:$(HUE_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   Airflow UI   → http://localhost:$(AIRFLOW_PORT_VAR)$(RESET)\n"
+	@printf "$(DIM)   Mailpit      → http://localhost:$(MAILPIT_UI_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   PostgreSQL   → localhost:$(POSTGRES_SOURCE_PORT_VAR)  (payments / payments123)$(RESET)\n"
 	@printf "$(DIM)   Stop with: make down$(RESET)\n"
 
@@ -401,7 +409,7 @@ logs-node:
 # ── Health checks ──────────────────────────────────────────────────
 health:
 	@printf "$(BOLD)$(GREEN)▶  Checking local service health [instance: $(INSTANCE)]...$(RESET)\n\n"
-	@for svc in rustfs spark-master kafka nessie jupyter trino cloudbeaver airflow-apiserver postgres-source; do \
+	@for svc in rustfs spark-master kafka nessie jupyter trino cloudbeaver airflow-apiserver postgres-source mailpit; do \
 		container="$(PROJECT_NAME)-$$svc-1"; \
 		printf "  $(CYAN)$$container$(RESET)  "; \
 		status=$$(docker inspect --format='{{.State.Health.Status}}' "$$container" 2>/dev/null || echo "not found"); \
@@ -476,6 +484,7 @@ console:
 	@printf "  $(BOLD)Trino UI$(RESET)     http://localhost:$(TRINO_PORT_VAR)\n"
 	@printf "  $(BOLD)CloudBeaver$(RESET)  http://localhost:$(HUE_PORT_VAR)  (create admin on first launch)\n"
 	@printf "  $(BOLD)Airflow UI$(RESET)   http://localhost:$(AIRFLOW_PORT_VAR)  ($(AIRFLOW_ADMIN_USER) / $(AIRFLOW_ADMIN_PASSWORD))\n"
+	@printf "  $(BOLD)Mailpit$(RESET)      http://localhost:$(MAILPIT_UI_PORT_VAR)  (Airflow alert inbox)\n"
 	@printf "  $(BOLD)PostgreSQL$(RESET)   localhost:$(POSTGRES_SOURCE_PORT_VAR)  (payments / payments123)\n\n"
 	@printf "  $(DIM)aws s3 --endpoint-url http://localhost:$(S3_PORT) ls$(RESET)\n\n"
 
@@ -511,7 +520,8 @@ console-dist:
 	@printf "    kafka-2  localhost:$(KAFKA_BROKER2_PORT)\n"
 	@printf "    kafka-3  localhost:$(KAFKA_BROKER3_PORT)\n\n"
 	@printf "  $(DIM)Bootstrap: localhost:$(KAFKA_PORT),localhost:$(KAFKA_BROKER2_PORT),localhost:$(KAFKA_BROKER3_PORT)$(RESET)\n\n"
-	@printf "  $(BOLD)Airflow UI$(RESET)   http://localhost:$(AIRFLOW_PORT_VAR)  (CeleryExecutor + 2 workers)\n\n"
+	@printf "  $(BOLD)Airflow UI$(RESET)   http://localhost:$(AIRFLOW_PORT_VAR)  (CeleryExecutor + 2 workers)\n"
+	@printf "  $(BOLD)Mailpit$(RESET)      http://localhost:$(MAILPIT_UI_PORT_VAR)  (Airflow alert inbox)\n\n"
 
 # ── Iceberg / Nessie ───────────────────────────────────────────────
 nessie-init-bucket:

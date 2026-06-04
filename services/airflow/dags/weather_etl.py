@@ -13,6 +13,8 @@ from datetime import datetime
 from airflow.providers.docker.operators.docker import DockerOperator
 from airflow.sdk import DAG
 
+from _notifiers import alert_on_failure, alert_on_success
+
 # Resolved per-instance by Compose substitution into the worker's env
 # (see services/airflow/docker-compose.yml x-airflow-common.environment).
 ETL_IMAGE = os.environ["ETL_APP_IMAGE"]
@@ -42,6 +44,8 @@ with DAG(
     max_active_runs=1,
     tags=["weather", "lakehouse", "medallion"],
     description="Open-Meteo Baku → bronze/silver/gold Iceberg tables",
+    on_failure_callback=alert_on_failure(),
+    on_success_callback=alert_on_success(),
 ) as dag:
     bronze = DockerOperator(
         task_id="bronze",
