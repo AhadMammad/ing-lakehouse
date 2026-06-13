@@ -42,8 +42,10 @@ RUSTFS_DIST_NODES  := rustfs1 rustfs2 rustfs3 rustfs4
 KAFKA_DIST_BROKERS := kafka-1 kafka-2 kafka-3
 SPARK_WORKERS      := spark-worker-1 spark-worker-2
 
-# Services included in `up-batch` — excludes nginx, kafka, spark, hue.
+# Services included in `up-batch` — includes the Spark cluster (for the
+# Spark-based auth_etl pipeline) but excludes nginx, kafka, hue.
 BATCH_SERVICES := rustfs nessie jupyter trino cloudbeaver \
+                  spark-master spark-worker-1 spark-worker-2 spark-history-server \
                   airflow-postgres airflow-redis airflow-init \
                   airflow-apiserver airflow-scheduler airflow-dag-processor \
                   airflow-triggerer airflow-worker-1 airflow-worker-2 \
@@ -69,9 +71,14 @@ START ?= 2024-01-01
 END   ?= 2024-01-31
 ROWS  ?= 1000
 RIDES ?= 500                          # rides/day for run-rideon-generator
+USERS ?= 50                           # signups/day for run-auth-generator
 
 # Rideon source DB name (second DB in the postgres-source container)
 RIDEON_SOURCE_DB := $(or $(RIDEON_SOURCE_DB),rideon)
+# Auth source DB name (third DB in the postgres-source container) + Spark history
+AUTH_SOURCE_DB       := $(or $(AUTH_SOURCE_DB),auth)
+SPARK_HISTORY_PORT_VAR := $(or $(SPARK_HISTORY_PORT),18080)
+SPARK_HISTORY_BUCKET   := $(or $(SPARK_HISTORY_BUCKET),spark-history)
 
 # dbt run selector (overridable): `make run-dbt SELECT='--select path:models/silver'`
 SELECT ?=
@@ -85,10 +92,11 @@ SELECT ?=
         logs-kafka logs-kafka-dist logs-nessie logs-jupyter logs-nginx logs-node \
         logs-trino logs-hue logs-airflow \
         health health-dist console console-ssl console-dist network \
-        nessie-init-bucket \
+        nessie-init-bucket spark-history-init-bucket \
         jupyter-rebuild reset-events-table reset-nessie \
-        build-etl-app logs-etl-app \
+        build-etl-app logs-etl-app build-etl-app-spark logs-spark-history \
         build-data-generator run-data-generator run-rideon-generator logs-postgres-source \
+        run-auth-generator run-auth-realtime up-auth-realtime down-auth-realtime \
         build-dbt run-dbt logs-dbt \
         setup-certs init-instance
 
@@ -146,17 +154,24 @@ help:
 	@printf "  $(CYAN)Airflow UI$(RESET)       $(DIM)http://localhost:$(AIRFLOW_PORT_VAR)  (admin / airflow)$(RESET)\n"
 	@printf "\n$(BOLD)  Iceberg / Curriculum$(RESET)\n"
 	@printf "  $(CYAN)nessie-init-bucket$(RESET)   $(DIM)Create Iceberg warehouse bucket in RustFS (run once after make up)$(RESET)\n"
+	@printf "  $(CYAN)spark-history-init-bucket$(RESET) $(DIM)Create the spark-history bucket for Spark event logs$(RESET)\n"
 	@printf "  $(CYAN)jupyter-rebuild$(RESET)      $(DIM)Rebuild Jupyter image after Dockerfile changes$(RESET)\n"
 	@printf "  $(CYAN)build-etl-app$(RESET)        $(DIM)Build the etl-app image used by the weather/crypto DAGs$(RESET)\n"
-	@printf "  $(CYAN)build-data-generator$(RESET) $(DIM)Build the data-generator image for payments seeder$(RESET)\n"
+	@printf "  $(CYAN)build-etl-app-spark$(RESET)  $(DIM)Build the custom Spark image (auth medallion: master/workers/history)$(RESET)\n"
+	@printf "  $(CYAN)build-data-generator$(RESET) $(DIM)Build the data-generator image for payments/rideon/auth seeders$(RESET)\n"
 	@printf "  $(CYAN)run-data-generator$(RESET)   $(DIM)Seed payments DB  (START=YYYY-MM-DD END=YYYY-MM-DD ROWS=N)$(RESET)\n"
 	@printf "  $(CYAN)run-rideon-generator$(RESET) $(DIM)Seed rideon DB    (START=YYYY-MM-DD END=YYYY-MM-DD RIDES=N)$(RESET)\n"
+	@printf "  $(CYAN)run-auth-generator$(RESET)   $(DIM)Seed auth DB      (START=YYYY-MM-DD END=YYYY-MM-DD USERS=N)$(RESET)\n"
+	@printf "  $(CYAN)run-auth-realtime$(RESET)    $(DIM)Real-time auth simulation, one-shot in foreground (Ctrl-C to stop)$(RESET)\n"
+	@printf "  $(CYAN)up-auth-realtime$(RESET)     $(DIM)Real-time auth simulation as a background service (realtime profile)$(RESET)\n"
+	@printf "  $(CYAN)down-auth-realtime$(RESET)   $(DIM)Stop the background auth-realtime service$(RESET)\n"
 	@printf "  $(CYAN)build-dbt$(RESET)            $(DIM)Build the dbt image used by the rideon_etl DAG$(RESET)\n"
 	@printf "  $(CYAN)run-dbt$(RESET)              $(DIM)Build rideon silver/gold on Trino  (SELECT='--select ...')$(RESET)\n"
 	@printf "  $(CYAN)logs-postgres-source$(RESET) $(DIM)Stream postgres-source container logs$(RESET)\n"
+	@printf "  $(CYAN)logs-spark-history$(RESET)   $(DIM)Stream spark-history-server logs$(RESET)\n"
 	@printf "  $(CYAN)reset-events-table$(RESET)   $(DIM)Drop demo.events + prune S3 prefix — replay 01–10 cleanly$(RESET)\n"
 	@printf "  $(RED)reset-nessie$(RESET)         $(DIM)Wipe Nessie state (volume) and re-init bucket  ⚠ destructive$(RESET)\n"
-	@printf "\n$(DIM)  Variables: INSTANCE=<name> (default: current user)  NODE=<container-name>  START/END/ROWS/RIDES (generators)$(RESET)\n\n"
+	@printf "\n$(DIM)  Variables: INSTANCE=<name> (default: current user)  NODE=<container-name>  START/END/ROWS/RIDES/USERS (generators)$(RESET)\n\n"
 
 # ── Multi-instance init ────────────────────────────────────────────
 init-instance:
@@ -181,6 +196,7 @@ init-instance:
 	PG=$$(echo "$$PORTS"   | awk '{print $$11}'); \
 	MPUI=$$(echo "$$PORTS" | awk '{print $$12}'); \
 	MPSMTP=$$(echo "$$PORTS"| awk '{print $$13}'); \
+	SPHIST=$$(echo "$$PORTS"| awk '{print $$14}'); \
 	SUBNET_IDX=$$(( $$(id -u) % 253 + 1 )); \
 	SUBNET="10.100.$${SUBNET_IDX}.0/24"; \
 	{ printf "COMPOSE_PROJECT_NAME=ing-lakehouse-$$INSTANCE\n\n"; \
@@ -198,12 +214,14 @@ init-instance:
 	sed -i "s|^POSTGRES_SOURCE_PORT=.*|POSTGRES_SOURCE_PORT=$$PG|" "$$ENV_FILE"; \
 	sed -i "s|^MAILPIT_UI_PORT=.*|MAILPIT_UI_PORT=$$MPUI|" "$$ENV_FILE"; \
 	sed -i "s|^MAILPIT_SMTP_PORT=.*|MAILPIT_SMTP_PORT=$$MPSMTP|" "$$ENV_FILE"; \
+	sed -i "s|^SPARK_HISTORY_PORT=.*|SPARK_HISTORY_PORT=$$SPHIST|" "$$ENV_FILE"; \
 	sed -i "s|^NETWORK_SUBNET=.*|NETWORK_SUBNET=$$SUBNET|" "$$ENV_FILE"; \
 	printf "$(GREEN)✔  Created $$ENV_FILE$(RESET)\n"; \
 	printf "$(DIM)   Project    → ing-lakehouse-$$INSTANCE$(RESET)\n"; \
 	printf "$(DIM)   Network    → $$SUBNET$(RESET)\n"; \
 	printf "$(DIM)   RustFS S3  → :$$S3    Console → :$$CON$(RESET)\n"; \
 	printf "$(DIM)   Spark UI   → :$$SPUI  Master  → :$$SPMAS$(RESET)\n"; \
+	printf "$(DIM)   Spark Hist → :$$SPHIST$(RESET)\n"; \
 	printf "$(DIM)   Kafka      → :$$KAF$(RESET)\n"; \
 	printf "$(DIM)   Nessie     → :$$NES$(RESET)\n"; \
 	printf "$(DIM)   Jupyter    → :$$JUP$(RESET)\n"; \
@@ -222,6 +240,7 @@ up:
 	@printf "$(DIM)   RustFS S3    → http://localhost:$(S3_PORT)$(RESET)\n"
 	@printf "$(DIM)   RustFS UI    → http://localhost:$(CONSOLE_PORT)$(RESET)\n"
 	@printf "$(DIM)   Spark UI     → http://localhost:$(SPARK_UI)$(RESET)\n"
+	@printf "$(DIM)   Spark Hist   → http://localhost:$(SPARK_HISTORY_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   Kafka        → localhost:$(KAFKA_PORT)$(RESET)\n"
 	@printf "$(DIM)   Nessie       → http://localhost:$(NESSIE_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   Jupyter      → http://localhost:$(JUPYTER_PORT_VAR)?token=$(JUPYTER_TOKEN)$(RESET)\n"
@@ -230,9 +249,10 @@ up:
 	@printf "$(DIM)   Airflow UI   → http://localhost:$(AIRFLOW_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   Mailpit      → http://localhost:$(MAILPIT_UI_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   PostgreSQL   → localhost:$(POSTGRES_SOURCE_PORT_VAR)  (payments / payments123)$(RESET)\n"
+	@printf "$(DIM)   Next: make nessie-init-bucket && make spark-history-init-bucket$(RESET)\n"
 
 up-batch:
-	@printf "$(BOLD)$(GREEN)▶  Starting ing-lakehouse (batch-only, no spark/kafka/nginx/hue) [instance: $(INSTANCE)]...$(RESET)\n"
+	@printf "$(BOLD)$(GREEN)▶  Starting ing-lakehouse (batch + spark, no kafka/nginx/hue) [instance: $(INSTANCE)]...$(RESET)\n"
 	@$(COMPOSE_LOCAL) up -d --build --remove-orphans $(BATCH_SERVICES)
 	@printf "$(GREEN)✔  Batch services started.$(RESET)\n"
 	@printf "$(DIM)   RustFS S3    → http://localhost:$(S3_PORT)$(RESET)\n"
@@ -241,6 +261,8 @@ up-batch:
 	@printf "$(DIM)   Jupyter      → http://localhost:$(JUPYTER_PORT_VAR)?token=$(JUPYTER_TOKEN)$(RESET)\n"
 	@printf "$(DIM)   Trino UI     → http://localhost:$(TRINO_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   CloudBeaver  → http://localhost:$(HUE_PORT_VAR)$(RESET)\n"
+	@printf "$(DIM)   Spark UI     → http://localhost:$(SPARK_UI)$(RESET)\n"
+	@printf "$(DIM)   Spark Hist   → http://localhost:$(SPARK_HISTORY_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   Airflow UI   → http://localhost:$(AIRFLOW_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   Mailpit      → http://localhost:$(MAILPIT_UI_PORT_VAR)$(RESET)\n"
 	@printf "$(DIM)   PostgreSQL   → localhost:$(POSTGRES_SOURCE_PORT_VAR)  (payments / payments123)$(RESET)\n"
@@ -409,7 +431,7 @@ logs-node:
 # ── Health checks ──────────────────────────────────────────────────
 health:
 	@printf "$(BOLD)$(GREEN)▶  Checking local service health [instance: $(INSTANCE)]...$(RESET)\n\n"
-	@for svc in rustfs spark-master kafka nessie jupyter trino cloudbeaver airflow-apiserver postgres-source mailpit; do \
+	@for svc in rustfs kafka nessie jupyter trino cloudbeaver airflow-apiserver postgres-source mailpit; do \
 		container="$(PROJECT_NAME)-$$svc-1"; \
 		printf "  $(CYAN)$$container$(RESET)  "; \
 		status=$$(docker inspect --format='{{.State.Health.Status}}' "$$container" 2>/dev/null || echo "not found"); \
@@ -417,6 +439,27 @@ health:
 			printf "$(GREEN)● healthy$(RESET)\n"; \
 		else \
 			printf "$(RED)● $$status$(RESET)\n"; \
+		fi; \
+	done
+	@printf "\n$(BOLD)  Spark (custom-named containers)$(RESET)\n"
+	@for svc in spark-master spark-history-server; do \
+		container="$(PROJECT_NAME)-$$svc"; \
+		printf "  $(CYAN)$$container$(RESET)  "; \
+		status=$$(docker inspect --format='{{.State.Health.Status}}' "$$container" 2>/dev/null || echo "not found"); \
+		if [ "$$status" = "healthy" ]; then \
+			printf "$(GREEN)● healthy$(RESET)\n"; \
+		else \
+			printf "$(RED)● $$status$(RESET)\n"; \
+		fi; \
+	done
+	@for svc in spark-worker-1 spark-worker-2; do \
+		container="$(PROJECT_NAME)-$$svc"; \
+		printf "  $(CYAN)$$container$(RESET)  "; \
+		state=$$(docker inspect --format='{{.State.Status}}' "$$container" 2>/dev/null || echo "not found"); \
+		if [ "$$state" = "running" ]; then \
+			printf "$(GREEN)● running$(RESET)\n"; \
+		else \
+			printf "$(RED)● $$state$(RESET)\n"; \
 		fi; \
 	done
 	@printf "\n"
@@ -436,14 +479,24 @@ health-dist:
 		fi; \
 	done
 	@printf "\n$(BOLD)  Spark$(RESET)\n"
-	@for svc in spark-master; do \
-		container="$(PROJECT_NAME)-$$svc-1"; \
+	@for svc in spark-master spark-history-server; do \
+		container="$(PROJECT_NAME)-$$svc"; \
 		printf "  $(CYAN)$$container$(RESET)  "; \
 		status=$$(docker inspect --format='{{.State.Health.Status}}' "$$container" 2>/dev/null || echo "not found"); \
 		if [ "$$status" = "healthy" ]; then \
 			printf "$(GREEN)● healthy$(RESET)\n"; \
 		else \
 			printf "$(RED)● $$status$(RESET)\n"; \
+		fi; \
+	done
+	@for svc in $(SPARK_WORKERS); do \
+		container="$(PROJECT_NAME)-$$svc"; \
+		printf "  $(CYAN)$$container$(RESET)  "; \
+		state=$$(docker inspect --format='{{.State.Status}}' "$$container" 2>/dev/null || echo "not found"); \
+		if [ "$$state" = "running" ]; then \
+			printf "$(GREEN)● running$(RESET)\n"; \
+		else \
+			printf "$(RED)● $$state$(RESET)\n"; \
 		fi; \
 	done
 	@printf "\n$(BOLD)  Kafka brokers$(RESET)\n"
@@ -478,6 +531,7 @@ console:
 	@printf "  $(BOLD)User$(RESET)         $(RUSTFS_ACCESS_KEY)\n"
 	@printf "  $(BOLD)Password$(RESET)     $(RUSTFS_SECRET_KEY)\n\n"
 	@printf "  $(BOLD)Spark UI$(RESET)     http://localhost:$(SPARK_UI)\n"
+	@printf "  $(BOLD)Spark Hist$(RESET)   http://localhost:$(SPARK_HISTORY_PORT_VAR)\n"
 	@printf "  $(BOLD)Kafka$(RESET)        localhost:$(KAFKA_PORT)\n\n"
 	@printf "  $(BOLD)Nessie$(RESET)       http://localhost:$(NESSIE_PORT_VAR)\n"
 	@printf "  $(BOLD)Jupyter$(RESET)      http://localhost:$(JUPYTER_PORT_VAR)?token=$(JUPYTER_TOKEN)\n\n"
@@ -546,6 +600,41 @@ nessie-init-bucket:
 		--endpoint-url http://rustfs:9000
 	@printf "$(GREEN)✔  Bucket '$(ICEBERG_WAREHOUSE_BUCKET)' is ready.$(RESET)\n"
 
+spark-history-init-bucket:
+	@printf "$(BOLD)$(CYAN)▶  Creating Spark history bucket '$(SPARK_HISTORY_BUCKET)' in RustFS [instance: $(INSTANCE)]...$(RESET)\n"
+	@docker run --rm \
+		--network $(NETWORK_NAME) \
+		-e AWS_ACCESS_KEY_ID=$(RUSTFS_ACCESS_KEY) \
+		-e AWS_SECRET_ACCESS_KEY=$(RUSTFS_SECRET_KEY) \
+		-e AWS_DEFAULT_REGION=us-east-1 \
+		amazon/aws-cli:latest \
+		s3api head-bucket \
+		--bucket $(SPARK_HISTORY_BUCKET) \
+		--endpoint-url http://rustfs:9000 2>/dev/null \
+	|| docker run --rm \
+		--network $(NETWORK_NAME) \
+		-e AWS_ACCESS_KEY_ID=$(RUSTFS_ACCESS_KEY) \
+		-e AWS_SECRET_ACCESS_KEY=$(RUSTFS_SECRET_KEY) \
+		-e AWS_DEFAULT_REGION=us-east-1 \
+		amazon/aws-cli:latest \
+		s3api create-bucket \
+		--bucket $(SPARK_HISTORY_BUCKET) \
+		--endpoint-url http://rustfs:9000
+	@# Spark's EventLoggingListener requires the log base dir to already exist as
+	@# a directory. Create a zero-byte `events/` marker so s3a getFileStatus
+	@# resolves it as a directory (idempotent — overwriting the marker is a no-op).
+	@docker run --rm \
+		--network $(NETWORK_NAME) \
+		-e AWS_ACCESS_KEY_ID=$(RUSTFS_ACCESS_KEY) \
+		-e AWS_SECRET_ACCESS_KEY=$(RUSTFS_SECRET_KEY) \
+		-e AWS_DEFAULT_REGION=us-east-1 \
+		amazon/aws-cli:latest \
+		s3api put-object \
+		--bucket $(SPARK_HISTORY_BUCKET) \
+		--key events/ \
+		--endpoint-url http://rustfs:9000 >/dev/null
+	@printf "$(GREEN)✔  Bucket '$(SPARK_HISTORY_BUCKET)' + events/ prefix ready. History UI → http://localhost:$(SPARK_HISTORY_PORT_VAR)$(RESET)\n"
+
 # ── Notebook curriculum helpers ────────────────────────────────────
 jupyter-rebuild:
 	@printf "$(BOLD)$(CYAN)▶  Rebuilding Jupyter image [instance: $(INSTANCE)]...$(RESET)\n"
@@ -574,6 +663,17 @@ build-etl-app:
 	@$(COMPOSE_LOCAL) --profile build-only build etl-app
 	@printf "$(GREEN)✔  Built $(PROJECT_NAME)-etl-app:latest$(RESET)\n"
 	@printf "$(DIM)   Trigger the DAG: http://localhost:$(AIRFLOW_PORT_VAR) → weather_etl_baku$(RESET)\n"
+
+# ── etl-app-spark build (custom Spark image: master/workers/history) ─
+build-etl-app-spark:
+	@printf "$(BOLD)$(CYAN)▶  Building custom Spark image (Iceberg+Nessie+s3a jars + etl_app_spark) [instance: $(INSTANCE)]...$(RESET)\n"
+	@$(COMPOSE_LOCAL) build spark-master
+	@printf "$(GREEN)✔  Built $(PROJECT_NAME)-spark:latest$(RESET)\n"
+	@printf "$(DIM)   Submit a job: trigger the auth_etl DAG, or docker exec $(PROJECT_NAME)-spark-master spark-submit ...$(RESET)\n"
+
+logs-spark-history:
+	@printf "$(BOLD)$(BLUE)▶  Streaming spark-history-server logs (Ctrl-C to exit)...$(RESET)\n"
+	@$(COMPOSE_LOCAL) logs -f --tail=100 spark-history-server
 
 # ── Data-generator build & run ─────────────────────────────────────
 build-data-generator:
@@ -613,6 +713,49 @@ run-rideon-generator:
 		--end-date $(END) \
 		--rides-per-day $(RIDES)
 	@printf "$(GREEN)✔  Rideon data generation complete.$(RESET)\n"
+
+run-auth-generator:
+	@printf "$(BOLD)$(CYAN)▶  Running auth generator: $(START) → $(END) ($(USERS) signups/day) [instance: $(INSTANCE)]...$(RESET)\n"
+	@docker run --rm \
+		--network $(NETWORK_NAME) \
+		-e PG_HOST=postgres-source \
+		-e PG_PORT=5432 \
+		-e PG_DB=$(AUTH_SOURCE_DB) \
+		-e PG_USER=$(POSTGRES_SOURCE_USER) \
+		-e PG_PASSWORD=$(POSTGRES_SOURCE_PASSWORD) \
+		$(PROJECT_NAME)-data-generator:latest \
+		data_generator.auth \
+		--start-date $(START) \
+		--end-date $(END) \
+		--users-per-day $(USERS)
+	@printf "$(GREEN)✔  Auth data generation complete.$(RESET)\n"
+
+# Real-time auth simulation — one-shot run (Ctrl-C / SIGTERM stops cleanly).
+run-auth-realtime:
+	@printf "$(BOLD)$(CYAN)▶  Running real-time auth simulation (Ctrl-C to stop) [instance: $(INSTANCE)]...$(RESET)\n"
+	@docker run --rm -it \
+		--network $(NETWORK_NAME) \
+		-e PG_HOST=postgres-source \
+		-e PG_PORT=5432 \
+		-e PG_DB=$(AUTH_SOURCE_DB) \
+		-e PG_USER=$(POSTGRES_SOURCE_USER) \
+		-e PG_PASSWORD=$(POSTGRES_SOURCE_PASSWORD) \
+		$(PROJECT_NAME)-data-generator:latest \
+		data_generator.auth_realtime \
+		--interval-seconds $(or $(AUTH_REALTIME_INTERVAL),5) \
+		--rate $(or $(AUTH_REALTIME_RATE),3)
+
+# Real-time auth simulation — long-lived background service (realtime profile).
+up-auth-realtime:
+	@printf "$(BOLD)$(GREEN)▶  Starting auth-realtime service [instance: $(INSTANCE)]...$(RESET)\n"
+	@$(COMPOSE_LOCAL) --profile realtime up -d --build auth-realtime
+	@printf "$(GREEN)✔  auth-realtime running. Follow it: $(DIM)$(COMPOSE_LOCAL) logs -f auth-realtime$(RESET)\n"
+
+down-auth-realtime:
+	@printf "$(BOLD)$(YELLOW)▶  Stopping auth-realtime service [instance: $(INSTANCE)]...$(RESET)\n"
+	@$(COMPOSE_LOCAL) --profile realtime stop auth-realtime
+	@$(COMPOSE_LOCAL) --profile realtime rm -f auth-realtime
+	@printf "$(GREEN)✔  auth-realtime stopped.$(RESET)\n"
 
 logs-postgres-source:
 	@printf "$(BOLD)$(BLUE)▶  Streaming postgres-source logs (Ctrl-C to exit)...$(RESET)\n"

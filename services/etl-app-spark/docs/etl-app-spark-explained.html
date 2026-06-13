@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>etl-app-spark — Detailed Code Explanation</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+  // Diagrams render via the Mermaid CDN (needs internet on first open).
+  window.addEventListener('DOMContentLoaded', () => {
+    if (window.mermaid) mermaid.initialize({ startOnLoad: true, theme: 'neutral', securityLevel: 'loose' });
+  });
+</script>
+<style>
+  :root{
+    --bg:#ffffff; --fg:#1f2430; --muted:#5b6472; --line:#e5e8ee;
+    --accent:#2b6cb0; --accent2:#6b46c1; --code-bg:#0f172a; --code-fg:#e2e8f0;
+    --br:#c5743b; --si:#9aa5b1; --go:#caa53d; --ok:#2f855a; --warn:#b7791f;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--fg);background:var(--bg)}
+  .wrap{display:grid;grid-template-columns:280px 1fr;max-width:1400px;margin:0 auto}
+  nav{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;padding:24px 18px;border-right:1px solid var(--line);font-size:14px}
+  nav h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:18px 0 8px}
+  nav a{display:block;color:var(--fg);text-decoration:none;padding:4px 8px;border-radius:6px}
+  nav a:hover{background:#f1f5f9;color:var(--accent)}
+  main{padding:40px 56px;min-width:0}
+  h1{font-size:34px;margin:0 0 6px;line-height:1.15}
+  h2{font-size:26px;margin:46px 0 12px;padding-bottom:8px;border-bottom:2px solid var(--line)}
+  h3{font-size:20px;margin:30px 0 8px;color:#2d3748}
+  h4{font-size:16px;margin:20px 0 6px;color:var(--accent2)}
+  p,li{color:#2d3748}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.9em;background:#eef2f7;color:#324; padding:1px 6px;border-radius:5px}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:18px 20px;border-radius:10px;overflow:auto;font-size:13.5px;line-height:1.55;border:1px solid #1e293b}
+  pre code{background:none;color:inherit;padding:0;font-size:inherit}
+  .lead{font-size:18px;color:var(--muted);max-width:70ch}
+  .tag{display:inline-block;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;color:#fff;vertical-align:middle}
+  .t-br{background:var(--br)} .t-si{background:#64748b} .t-go{background:var(--go)} .t-cfg{background:var(--accent)}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top}
+  th{background:#f8fafc;font-weight:600}
+  .mermaid{margin:18px 0;text-align:center}
+  .note{border-left:4px solid var(--accent);background:#f0f7ff;padding:12px 16px;border-radius:0 8px 8px 0;margin:16px 0}
+  .warn{border-left:4px solid var(--warn);background:#fffaf0;padding:12px 16px;border-radius:0 8px 8px 0;margin:16px 0}
+  .ok{border-left:4px solid var(--ok);background:#f0fff4;padding:12px 16px;border-radius:0 8px 8px 0;margin:16px 0}
+  .pill{font-family:"SF Mono",monospace;font-size:12px;background:#eef2f7;border:1px solid var(--line);border-radius:6px;padding:2px 7px}
+  .filehdr{font-family:"SF Mono",monospace;font-size:13px;color:#fff;background:#334155;padding:6px 14px;border-radius:8px 8px 0 0;display:inline-block;margin-top:8px}
+  .filehdr + pre{border-top-left-radius:0;margin-top:0}
+  footer{margin:60px 0 30px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:18px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:1000px){.wrap{grid-template-columns:1fr}nav{display:none}main{padding:24px}.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav>
+  <strong>etl-app-spark</strong>
+  <h2>Contents</h2>
+  <a href="#overview">1. Overview</a>
+  <a href="#arch">2. Architecture</a>
+  <a href="#tree">3. Directory layout</a>
+  <a href="#submit">4. How a job is submitted</a>
+  <a href="#config">5. config.py</a>
+  <a href="#session">6. session.py</a>
+  <a href="#catalog">7. catalog.py</a>
+  <a href="#meta">8. meta.py</a>
+  <a href="#schemas">9. schema specs</a>
+  <a href="#classes">10. Class design</a>
+  <a href="#bronze">11. Bronze job</a>
+  <a href="#silver">12. Silver job</a>
+  <a href="#gold">13. Gold job + SCD2</a>
+  <a href="#star">14. Star schema</a>
+  <a href="#flow">15. End-to-end flow</a>
+  <a href="#main">16. Entry point</a>
+  <a href="#run">17. Run &amp; verify</a>
+  <a href="#metaref">18. Meta-column reference</a>
+</nav>
+<main>
+
+<h1>etl-app-spark</h1>
+<p class="lead">An object-oriented PySpark medallion pipeline that ingests the <code>auth</code> identity-service
+database into an Apache Iceberg lakehouse (Nessie REST catalog + RustFS/S3), across three isolated
+layers — <span class="tag t-br">auth_bronze</span> <span class="tag t-si">auth_silver</span>
+<span class="tag t-go">auth_gold</span> — with a Type-2 slowly-changing <code>dim_user</code>.</p>
+
+<!-- ───────────────────────────── 1 ───────────────────────────── -->
+<h2 id="overview">1. Overview &amp; purpose</h2>
+<p>The wider <em>ing-lakehouse</em> already lands two sources (<code>payments</code>, <code>rideon</code>) via a
+PyIceberg/Polars app and dbt-on-Trino. <strong>etl-app-spark</strong> is a third, fully Spark-native pipeline for a
+new <code>auth</code> source. Its job is to demonstrate industry-standard medallion practice on a real Spark
+standalone cluster:</p>
+<ul>
+  <li><strong>Bronze</strong> — land raw OLTP tables <em>as-is</em> + provenance meta columns.</li>
+  <li><strong>Silver</strong> — cleaned, de-duplicated, conformed tables (SCD1 upsert).</li>
+  <li><strong>Gold</strong> — a Kimball star schema with a <strong>Type-2</strong> <code>dim_user</code> dimension.</li>
+</ul>
+<p>Everything is OOP: one small class hierarchy (<code>SparkJob</code> → Bronze/Silver/Gold) plus thin config,
+session, catalog, and meta helper modules. A single entry point maps
+<code>--job/--table/--date</code> to the right class.</p>
+
+<div class="note"><strong>Design choices baked in:</strong> isolated <code>auth_*</code> namespaces (no collision
+with the shared <code>bronze/silver/gold</code>), the Iceberg <em>REST</em> catalog against Nessie (no
+<code>nessie-spark-extensions</code> needed), and <code>client</code> deploy-mode so the driver runs inside
+<code>spark-master</code> while executors run on the workers.</div>
+
+<!-- ───────────────────────────── 2 ───────────────────────────── -->
+<h2 id="arch">2. Architecture</h2>
+<p>Where the app sits and how data and control flow through the stack:</p>
+<div class="mermaid">
+flowchart LR
+  subgraph SRC["postgres-source"]
+    AUTH[("auth DB<br/>13 OLTP tables")]
+  end
+  subgraph ORCH["Airflow (CeleryExecutor)"]
+    DAG["auth_etl DAG<br/>one BashOperator per table"]
+  end
+  subgraph SPARKC["Spark standalone cluster (custom image)"]
+    M["spark-master<br/>driver (client mode)"]
+    W1["spark-worker-1"]
+    W2["spark-worker-2"]
+    HS["history-server :18080"]
+  end
+  subgraph LAKE["Lakehouse"]
+    NES["Nessie<br/>Iceberg REST catalog"]
+    RFS[("RustFS — S3<br/>iceberg-warehouse")]
+  end
+  DAG -->|"docker exec spark-submit"| M
+  M --> W1
+  M --> W2
+  M -->|"JDBC read"| AUTH
+  M -->|"Iceberg write (S3FileIO)"| NES
+  NES --- RFS
+  M -.->|"event logs (s3a)"| RFS
+  HS -.->|"reads events"| RFS
+</div>
+<p>Two <em>independent</em> S3 access paths share RustFS: Iceberg table I/O uses <strong>S3FileIO</strong>
+(AWS SDK v2, configured in <code>session.py</code>), while Spark <strong>event logs</strong> use the Hadoop
+<strong>s3a</strong> filesystem (baked into <code>spark-defaults.conf</code>). Both must be configured; they
+do not share credentials wiring.</p>
+
+<!-- ───────────────────────────── 3 ───────────────────────────── -->
+<h2 id="tree">3. Directory layout</h2>
+<div class="filehdr">services/etl-app-spark/</div>
+<pre><code>Dockerfile                  # custom Spark 3.5.3 image: bakes jars + this code
+conf/spark-defaults.conf    # catalog + s3a event-log config (baked in image)
+pyproject.toml              # pyspark==3.5.3 (dev/lint parity)
+src/etl_app_spark/
+├── __init__.py
+├── __main__.py             # entry point: --job/--table/--date dispatch
+├── config.py               # env-driven constants + JDBC helpers
+├── session.py              # SparkSessionFactory (Iceberg REST catalog)
+├── catalog.py              # namespaces, table_exists, write/upsert helpers
+├── meta.py                 # bronze/silver meta-column injectors
+├── jobs/
+│   ├── base.py             # SparkJob ABC (extract→transform→load template)
+│   ├── bronze.py           # AuthBronzeJob
+│   ├── silver.py           # AuthSilverJob
+│   └── gold.py             # AuthGoldJob (dims, facts, dim_user SCD2)
+└── schemas/
+    ├── source_tables.py    # BronzeSpec per source table
+    ├── silver_specs.py     # SilverSpec per cleaned table
+    └── gold_specs.py       # star-schema config (SCD2 tracked attrs, families)</code></pre>
+
+<!-- ───────────────────────────── 4 ───────────────────────────── -->
+<h2 id="submit">4. How a job is submitted</h2>
+<p>The Airflow image has no JDK/Spark client, so each task is a <code>BashOperator</code> that
+<code>docker exec</code>s <code>spark-submit</code> into the running <code>spark-master</code> container
+(through the docker-socket-proxy). The code and all jars are <em>baked</em> into the custom image, so master
+and both workers are identical — required for <code>client</code> deploy-mode.</p>
+<div class="mermaid">
+sequenceDiagram
+  participant SCH as Airflow scheduler
+  participant WK as Celery worker
+  participant PX as docker-socket-proxy
+  participant SM as spark-master (driver)
+  participant WRK as spark-workers (executors)
+  participant PG as postgres auth
+  participant ICE as Nessie + RustFS
+  SCH->>WK: queue task ingest_users
+  WK->>PX: docker exec spark-submit ...
+  PX->>SM: exec spark-submit (client mode)
+  SM->>WRK: request executors
+  SM->>PG: JDBC read (this table)
+  SM->>ICE: write Iceberg table
+  SM-->>WK: stdout "[bronze:users] rows=N" + exit code
+  WK-->>SCH: success / failure (real exit code)
+</div>
+<div class="filehdr">services/airflow/dags/auth_etl.py — the submit command</div>
+<pre><code>def spark_submit(job: str, table: str) -> str:
+    return (
+        f"docker exec {_ENV_FLAGS} {SPARK_CONTAINER} "
+        f"/opt/spark/bin/spark-submit "
+        f"--master spark://spark-master:7077 --deploy-mode client "
+        f"--name auth_{job}_{table}_{{{{ ds }}}} "
+        f"{APP} --job {job} --table {table} --date {{{{ ds }}}} --run-id '{{{{ run_id }}}}'"
+    )</code></pre>
+<p><code>{{ ds }}</code> (logical date) and <code>{{ run_id }}</code> are Airflow templating. The DAG runs
+bronze → silver → gold, with <code>max_active_tasks=1</code> so the small cluster runs one job at a time.</p>
+
+<!-- ───────────────────────────── 5 ───────────────────────────── -->
+<h2 id="config">5. <span class="tag t-cfg">config.py</span> — runtime configuration</h2>
+<p>Module-level constants read from environment variables (same contract as the existing
+<code>etl-app</code>). No Pydantic; the Spark services receive <code>RUSTFS_*/AWS_*</code> via
+<code>env_file</code>, and the DAG injects <code>PG_*</code> via <code>docker exec -e</code>.</p>
+<pre><code>CATALOG_NAME = "nessie"
+NESSIE_URI   = os.environ.get("NESSIE_URI", "http://nessie:19120/iceberg")
+S3_ENDPOINT  = os.environ.get("AWS_S3_ENDPOINT", "http://rustfs:9000")
+S3_KEY       = os.environ.get("AWS_ACCESS_KEY_ID") or os.environ["RUSTFS_ACCESS_KEY"]
+S3_SECRET    = os.environ.get("AWS_SECRET_ACCESS_KEY") or os.environ["RUSTFS_SECRET_KEY"]
+WAREHOUSE_URI = f"s3://{WAREHOUSE_BUCKET}/warehouse"
+SOURCE_SYSTEM = os.environ.get("SOURCE_SYSTEM", "postgres.auth")
+
+def jdbc_url() -> str:
+    return f"jdbc:postgresql://{PG_HOST}:{PG_PORT}/{PG_DB}"   # PG_DB defaults "auth"</code></pre>
+<table>
+<tr><th>Variable</th><th>Purpose</th><th>Default</th></tr>
+<tr><td><code>NESSIE_URI</code></td><td>Iceberg REST endpoint</td><td>http://nessie:19120/iceberg</td></tr>
+<tr><td><code>S3_ENDPOINT</code></td><td>RustFS S3 endpoint</td><td>http://rustfs:9000</td></tr>
+<tr><td><code>S3_KEY/S3_SECRET</code></td><td>S3FileIO credentials</td><td>from <code>RUSTFS_*</code></td></tr>
+<tr><td><code>PG_HOST/PORT/DB/USER/PASSWORD</code></td><td>JDBC source (auth DB)</td><td>postgres-source / 5432 / auth</td></tr>
+<tr><td><code>SOURCE_SYSTEM</code></td><td>provenance stamp in bronze meta</td><td>postgres.auth</td></tr>
+</table>
+
+<!-- ───────────────────────────── 6 ───────────────────────────── -->
+<h2 id="session">6. <span class="tag t-cfg">session.py</span> — the SparkSession factory</h2>
+<p>Builds a session configured for the Iceberg <strong>REST</strong> catalog. Credentials are set
+<em>programmatically</em> here (kept out of the baked config file); everything else is in
+<code>spark-defaults.conf</code>.</p>
+<pre><code>class SparkSessionFactory:
+    @staticmethod
+    def build(app_name: str) -> SparkSession:
+        cat = config.CATALOG_NAME            # "nessie"
+        builder = (
+            SparkSession.builder.appName(app_name)
+            .config("spark.sql.extensions",
+                    "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
+            .config(f"spark.sql.catalog.{cat}", "org.apache.iceberg.spark.SparkCatalog")
+            .config(f"spark.sql.catalog.{cat}.type", "rest")
+            .config(f"spark.sql.catalog.{cat}.uri", config.NESSIE_URI)
+            .config(f"spark.sql.catalog.{cat}.warehouse", config.WAREHOUSE_URI)
+            .config(f"spark.sql.catalog.{cat}.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
+            .config(f"spark.sql.catalog.{cat}.s3.endpoint", config.S3_ENDPOINT)
+            .config(f"spark.sql.catalog.{cat}.s3.path-style-access", "true")
+            .config(f"spark.sql.catalog.{cat}.s3.access-key-id", config.S3_KEY)
+            .config(f"spark.sql.catalog.{cat}.s3.secret-access-key", config.S3_SECRET)
+            .config(f"spark.sql.catalog.{cat}.client.region", config.S3_REGION)
+            .config("spark.sql.defaultCatalog", cat)
+        )
+        spark = builder.getOrCreate()
+        spark.sparkContext.setLogLevel("WARN")
+        return spark</code></pre>
+<table>
+<tr><th>Config key</th><th>What it does</th></tr>
+<tr><td><code>spark.sql.extensions</code></td><td>Enables Iceberg SQL (<code>MERGE INTO</code>, <code>writeTo</code> V2, partition ops).</td></tr>
+<tr><td><code>...catalog.nessie.type = rest</code></td><td>Use the Iceberg REST protocol — Nessie exposes it at <code>/iceberg</code>.</td></tr>
+<tr><td><code>...io-impl = S3FileIO</code></td><td>Read/write data files directly to S3 (AWS SDK v2), bypassing Hadoop FS.</td></tr>
+<tr><td><code>...s3.path-style-access = true</code></td><td>Required for RustFS/MinIO-style endpoints.</td></tr>
+<tr><td><code>spark.sql.defaultCatalog = nessie</code></td><td>So <code>nessie.</code> is optional in SQL.</td></tr>
+</table>
+<div class="warn"><strong>Gotcha:</strong> Nessie's REST endpoint here is <em>unauthenticated</em> — do
+<u>not</u> set <code>rest.auth.type</code>/token or catalog init fails.</div>
+
+<!-- ───────────────────────────── 7 ───────────────────────────── -->
+<h2 id="catalog">7. <span class="tag t-cfg">catalog.py</span> — namespaces &amp; write helpers</h2>
+<p>Maps each medallion layer to an isolated namespace and centralizes the three write patterns.</p>
+<pre><code>def namespace(layer): return f"auth_{layer}"                 # bronze -> auth_bronze
+def table_fqn(layer, name): return f"nessie.auth_{layer}.{name}"
+def ensure_namespace(spark, layer):
+    spark.sql(f"CREATE NAMESPACE IF NOT EXISTS nessie.auth_{layer}")
+
+def table_exists(spark, fqn) -> bool:        # reliable across the REST catalog
+    try:    spark.table(fqn); return True
+    except Exception: return False</code></pre>
+
+<h4>write_iceberg — bronze writes <span class="tag t-br">snapshot</span> / <span class="tag t-br">append</span></h4>
+<pre><code>def write_iceberg(df, fqn, partition_cols, mode):
+    if not table_exists(spark, fqn):
+        writer = df.writeTo(fqn).using("iceberg")
+        if partition_cols: writer = writer.partitionedBy(col(partition_cols[0]), ...)
+        writer.create()                 # first run: create from df
+        return
+    if   mode == "snapshot": df.writeTo(fqn).overwritePartitions()   # reload this day's partition
+    elif mode == "append":   df.writeTo(fqn).append()                # add the day's new events</code></pre>
+<ul>
+  <li><strong>snapshot</strong> (reference/dimension-like tables: users, roles, …) — <code>overwritePartitions()</code>
+  dynamically replaces only the <code>logical_date</code> partitions present in the dataframe, so re-running a day is idempotent.</li>
+  <li><strong>append</strong> (event tables: sessions, login_attempts, …) — adds the day's slice.</li>
+</ul>
+
+<h4>upsert_iceberg — silver SCD1 via <code>MERGE INTO</code></h4>
+<pre><code>def upsert_iceberg(df, fqn, keys):
+    if not table_exists(spark, fqn):
+        df.writeTo(fqn).using("iceberg").create(); return        # initial load
+    df.createOrReplaceTempView(view)
+    on = " AND ".join(f"t.{k} = s.{k}" for k in keys)
+    spark.sql(f"""
+        MERGE INTO {fqn} t USING {view} s ON {on}
+        WHEN MATCHED THEN UPDATE SET *
+        WHEN NOT MATCHED THEN INSERT *""")</code></pre>
+
+<!-- ───────────────────────────── 8 ───────────────────────────── -->
+<h2 id="meta">8. <span class="tag t-cfg">meta.py</span> — meta-column injectors</h2>
+<p>Industry-standard provenance &amp; change-detection columns, added with pure Spark expressions.</p>
+<pre><code>def add_bronze_meta(df, logical_date, run_id):
+    source_cols = df.columns
+    return (df
+      .withColumn("raw_payload", F.to_json(F.struct(*[F.col(c) for c in source_cols])))
+      .withColumn("ingest_ts", F.current_timestamp())
+      .withColumn("logical_date", F.to_date(F.lit(logical_date)))
+      .withColumn("source", F.lit(SOURCE_SYSTEM))
+      .withColumn("_ingest_run_id", F.lit(run_id))
+      .withColumn("_source_system", F.lit(SOURCE_SYSTEM)))
+
+def add_silver_meta(df, business_cols, logical_date):
+    return (df
+      .withColumn("_record_hash",
+          F.sha2(F.concat_ws("||", *[F.coalesce(F.col(c).cast("string"), F.lit("")) for c in business_cols]), 256))
+      .withColumn("_loaded_at", F.current_timestamp())
+      .withColumn("_source_logical_date", F.to_date(F.lit(logical_date))))</code></pre>
+<p><code>raw_payload</code> captures the original row as JSON (audit/replay). <code>_record_hash</code> is a
+NULL-safe SHA-256 over the business columns — it powers silver de-dup and the gold SCD2 change test.</p>
+
+<!-- ───────────────────────────── 9 ───────────────────────────── -->
+<h2 id="schemas">9. Schema specs</h2>
+<p>Declarative configuration, separate from logic.</p>
+<h4>source_tables.py — one <code>BronzeSpec</code> per source table</h4>
+<pre><code>@dataclass(frozen=True)
+class BronzeSpec:
+    source: str; bronze: str; mode: str; columns: list[str]; watermark: str | None = None
+    def select_sql(self, logical_date):
+        where = f"WHERE {self.watermark}::date = DATE '{logical_date}'" if self.mode=="incremental" else ""
+        return f"(SELECT {', '.join(self.columns)} FROM {self.source} {where}) AS t"</code></pre>
+<p>13 specs total. <code>INET</code>/<code>JSONB</code> columns are cast to text in the SELECT
+(<code>ip_address::text</code>, <code>detail::text</code>) so the Spark JDBC reader stays on safe types.
+Snapshot tables read fully; incremental tables push the date filter down to Postgres.</p>
+<div class="grid2">
+<div>
+<h4>silver_specs.py</h4>
+<pre><code>SilverSpec(name, bronze, keys, business_cols)
+# users, roles, permissions, sessions,
+# login_attempts, oauth_accounts, mfa_devices</code></pre>
+</div>
+<div>
+<h4>gold_specs.py</h4>
+<pre><code>SCD2_TRACKED_ATTRS = [username,email,status,
+  country,display_name,is_mfa_enabled,primary_role]
+AUTH_METHOD_FAMILY = {PASSWORD:password,
+  OAUTH_*:oauth, MFA_*:mfa, MAGIC_LINK:passwordless}</code></pre>
+</div>
+</div>
+
+<!-- ───────────────────────────── 10 ───────────────────────────── -->
+<h2 id="classes">10. Class design</h2>
+<p>A classic <em>template method</em>: the base orchestrates <code>extract → transform → load</code>;
+subclasses fill in the steps. Gold overrides <code>run()</code> because it builds one named dim/fact per call.</p>
+<div class="mermaid">
+classDiagram
+  class SparkJob {
+    +layer: str
+    +spark, table, logical_date, run_id
+    +run() void
+    +extract()* DataFrame
+    +transform(df)* DataFrame
+    +load(df)* void
+  }
+  class AuthBronzeJob { layer = "bronze" }
+  class AuthSilverJob { layer = "silver" }
+  class AuthGoldJob { layer = "gold"\n+run() overridden }
+  SparkJob <|-- AuthBronzeJob
+  SparkJob <|-- AuthSilverJob
+  SparkJob <|-- AuthGoldJob
+</div>
+<div class="filehdr">jobs/base.py</div>
+<pre><code>class SparkJob(ABC):
+    layer = ""
+    def __init__(self, spark, table, logical_date, run_id): ...
+    def run(self):                              # template method
+        catalog.ensure_namespace(self.spark, self.layer)
+        df  = self.extract()
+        out = self.transform(df)
+        self.load(out)
+        self.log_done(out)
+    @abstractmethod
+    def extract(self) -> DataFrame: ...
+    @abstractmethod
+    def transform(self, df) -> DataFrame: ...
+    @abstractmethod
+    def load(self, df) -> None: ...</code></pre>
+
+<!-- ───────────────────────────── 11 ───────────────────────────── -->
+<h2 id="bronze">11. <span class="tag t-br">Bronze</span> job</h2>
+<p>Raw landing: JDBC read → add bronze meta → write Iceberg (snapshot or append).</p>
+<pre><code>class AuthBronzeJob(SparkJob):
+    layer = "bronze"
+    def extract(self):
+        return (self.spark.read.format("jdbc")
+            .option("url", config.jdbc_url())
+            .option("dbtable", self.spec.select_sql(self.logical_date))
+            .option("user", config.PG_USER).option("password", config.PG_PASSWORD)
+            .option("driver", "org.postgresql.Driver").load())
+    def transform(self, df):
+        return meta.add_bronze_meta(df, self.logical_date, self.run_id)
+    def load(self, df):
+        fqn = catalog.table_fqn("bronze", self.spec.bronze)        # nessie.auth_bronze.&lt;t&gt;_raw
+        mode = "snapshot" if self.spec.mode == "snapshot" else "append"
+        catalog.write_iceberg(df, fqn, partition_cols=["logical_date"], mode=mode)</code></pre>
+<div class="mermaid">
+flowchart LR
+  PG["auth.&lt;table&gt; (Postgres)"] -->|"JDBC select"| EX[extract]
+  EX --> TR["transform: + raw_payload, ingest_ts,<br/>logical_date, source, _ingest_run_id"]
+  TR --> LD{mode?}
+  LD -->|snapshot| OW["overwritePartitions(logical_date)"]
+  LD -->|incremental| AP["append"]
+  OW --> T[("auth_bronze.&lt;table&gt;_raw")]
+  AP --> T
+</div>
+
+<!-- ───────────────────────────── 12 ───────────────────────────── -->
+<h2 id="silver">12. <span class="tag t-si">Silver</span> job</h2>
+<p>Read the day's bronze slice → keep latest row per natural key → clean → add silver meta → SCD1 upsert.</p>
+<pre><code>def extract(self):
+    df = self.spark.table(bronze).where(F.col("logical_date") == F.to_date(F.lit(self.logical_date)))
+    w  = Window.partitionBy(*keys).orderBy(F.col("ingest_ts").desc())
+    return df.withColumn("_rn", F.row_number().over(w)).where(F.col("_rn")==1).drop("_rn")
+def transform(self, df):
+    cleaned = _CLEANERS[self.table](df)                 # per-table cleaning
+    return meta.add_silver_meta(cleaned, self.spec.business_cols, self.logical_date)
+def load(self, df):
+    catalog.upsert_iceberg(df, catalog.table_fqn("silver", self.spec.name), self.spec.keys)</code></pre>
+<p>Cleaning examples: lowercase email/username/status, uppercase country, derive <code>is_locked</code>;
+for <code>sessions</code> derive <code>is_active</code>, <code>was_revoked</code>,
+<code>session_duration_seconds</code>; for <code>login_attempts</code> derive <code>attempt_outcome</code>.</p>
+<div class="mermaid">
+flowchart LR
+  B[("auth_bronze.&lt;t&gt;_raw<br/>day slice")] --> D["dedup: row_number()<br/>latest ingest_ts per key"]
+  D --> C["clean + derive columns"]
+  C --> M["+ _record_hash, _loaded_at"]
+  M --> U["MERGE INTO (SCD1)<br/>update * / insert *"]
+  U --> S[("auth_silver.&lt;t&gt;")]
+</div>
+
+<!-- ───────────────────────────── 13 ───────────────────────────── -->
+<h2 id="gold">13. <span class="tag t-go">Gold</span> job + SCD2</h2>
+<p><code>AuthGoldJob</code> overrides <code>run()</code> and dispatches on the table name:</p>
+<pre><code>handler = {"dim_date":..., "dim_role":..., "dim_auth_method":...,
+           "dim_user":..., "fact_login_attempts":..., "fact_sessions":...}[self.table]</code></pre>
+<ul>
+  <li><strong>dim_date</strong> — generated calendar (<code>sequence(2020-01-01 … logical_date)</code>), upsert on <code>date_key</code>.</li>
+  <li><strong>dim_role</strong> — from silver roles + permission counts; SCD1 upsert.</li>
+  <li><strong>dim_auth_method</strong> — distinct methods from sessions/logins, mapped to a family; SCD1.</li>
+  <li><strong>dim_user</strong> — <strong>SCD Type 2</strong> (below).</li>
+  <li><strong>fact_login_attempts / fact_sessions</strong> — point-in-time FK to <code>dim_user</code>.</li>
+</ul>
+
+<h3>dim_user — Slowly Changing Dimension Type 2</h3>
+<p>The source is the current silver <code>users</code> enriched with <code>is_mfa_enabled</code> and
+<code>primary_role</code>. A SHA-256 <code>_record_hash</code> over the <strong>tracked attributes</strong>
+decides whether a user changed. The build is a <strong>two-step</strong> close-out + insert (a single MERGE
+cannot both close the old version and insert the new one for the same key):</p>
+<pre><code># build src with _record_hash over SCD2_TRACKED_ATTRS and _effective_from = logical_date
+# Step 1 — close out current rows whose hash changed
+MERGE INTO nessie.auth_gold.dim_user t
+USING _dim_user_src s
+  ON t.user_nk = s.user_nk AND t._is_current = true
+WHEN MATCHED AND t._record_hash &lt;&gt; s._record_hash THEN
+  UPDATE SET t._is_current = false, t._effective_to = s._effective_from
+
+# Step 2 — insert brand-new users + new versions of just-closed users
+current = dim_user.where(_is_current)                       # after step 1
+new_versions = src LEFT JOIN current ON user_nk
+               WHERE current is null OR hash differs
+new_versions.writeTo(dim_user).append()</code></pre>
+<p>Each version row carries: <code>user_sk = md5(user_nk | _effective_from)</code> (surrogate key),
+<code>_effective_from</code>, <code>_effective_to</code> (sentinel <code>9999-12-31</code> while current),
+and <code>_is_current</code>.</p>
+<div class="mermaid">
+flowchart TB
+  SRC["silver users<br/>+ mfa + primary_role<br/>+ _record_hash"] --> Q{table exists?}
+  Q -->|no| INIT["create all rows as v1<br/>_is_current=true"]
+  Q -->|yes| S1["Step 1: MERGE close-out<br/>changed current rows<br/>(is_current=false, set effective_to)"]
+  S1 --> S2["Step 2: find new/changed keys<br/>(no current row OR hash differs)"]
+  S2 --> APP["append new version rows<br/>_is_current=true"]
+</div>
+<h4>Worked example</h4>
+<p>User <code>U1</code> starts <code>active</code>; on 2026-05-02 the generator locks the account
+(<code>status → locked</code>, bumping <code>updated_at</code>). After running gold for both days:</p>
+<table>
+<tr><th>user_sk</th><th>user_nk</th><th>status</th><th>_effective_from</th><th>_effective_to</th><th>_is_current</th></tr>
+<tr><td>md5(U1|05-01)</td><td>U1</td><td>active</td><td>2026-05-01</td><td>2026-05-02</td><td>false</td></tr>
+<tr><td>md5(U1|05-02)</td><td>U1</td><td>locked</td><td>2026-05-02</td><td>9999-12-31</td><td>true</td></tr>
+</table>
+
+<h3>Facts — point-in-time dimension join</h3>
+<p>A fact row joins to the <em>version of the user that was current when the event happened</em>:</p>
+<pre><code>src.join(dim_user,
+   (src.user_id == dim.user_nk)
+   &amp; (dim._effective_from &lt;= src.attempted_at)
+   &amp; (src.attempted_at &lt; dim._effective_to), "left")
+# user_sk = coalesce(matched user_sk, "-1")   # "-1" = unknown member</code></pre>
+<p>Facts also derive <code>date_key</code>, <code>auth_method_sk = md5(auth_method)</code>, measures
+(<code>is_success</code>, <code>session_duration_seconds</code>, …), and are partitioned by event date,
+upserted on their PK for idempotency.</p>
+
+<!-- ───────────────────────────── 14 ───────────────────────────── -->
+<h2 id="star">14. The gold star schema</h2>
+<div class="mermaid">
+erDiagram
+  DIM_USER ||--o{ FACT_LOGIN_ATTEMPTS : user_sk
+  DIM_DATE ||--o{ FACT_LOGIN_ATTEMPTS : date_key
+  DIM_AUTH_METHOD ||--o{ FACT_LOGIN_ATTEMPTS : auth_method_sk
+  DIM_USER ||--o{ FACT_SESSIONS : user_sk
+  DIM_DATE ||--o{ FACT_SESSIONS : date_key
+  DIM_AUTH_METHOD ||--o{ FACT_SESSIONS : auth_method_sk
+  DIM_USER {
+    string user_sk PK
+    string user_nk
+    string status
+    timestamp _effective_from
+    timestamp _effective_to
+    boolean _is_current
+  }
+  FACT_LOGIN_ATTEMPTS {
+    bigint attempt_id PK
+    string user_sk FK
+    int date_key FK
+    string auth_method_sk FK
+    int is_success
+  }
+  FACT_SESSIONS {
+    string session_id PK
+    string user_sk FK
+    int date_key FK
+    long session_duration_seconds
+  }
+</div>
+
+<!-- ───────────────────────────── 15 ───────────────────────────── -->
+<h2 id="flow">15. End-to-end medallion flow</h2>
+<div class="mermaid">
+flowchart LR
+  A[("auth DB<br/>13 tables")] -->|JDBC + bronze meta| B["auth_bronze<br/>13 *_raw tables"]
+  B -->|dedup + clean + SCD1| S["auth_silver<br/>7 conformed tables"]
+  S -->|star + SCD2| G["auth_gold<br/>dim_date, dim_role,<br/>dim_auth_method,<br/>dim_user (SCD2),<br/>fact_login_attempts,<br/>fact_sessions"]
+</div>
+<p>Orchestrated daily by the <code>auth_etl</code> DAG, one task per table, serialized
+(<code>max_active_tasks=1</code>) so the 2-worker cluster is never oversubscribed.</p>
+
+<!-- ───────────────────────────── 16 ───────────────────────────── -->
+<h2 id="main">16. <span class="tag t-cfg">__main__.py</span> — entry point</h2>
+<pre><code>_JOBS = {"bronze": AuthBronzeJob, "silver": AuthSilverJob, "gold": AuthGoldJob}
+
+def main():
+    args = parse_args()                       # --job --table --date [--run-id]
+    run_id = args.run_id or f"manual-{uuid.uuid4()}"
+    spark = SparkSessionFactory.build(f"auth_{args.job}_{args.table}_{args.date}")
+    try:
+        _JOBS[args.job](spark, args.table, args.date, run_id).run()
+    finally:
+        spark.stop()</code></pre>
+<p>Run as a module: <span class="pill">python -m etl_app_spark --job bronze --table users --date 2026-05-01</span></p>
+
+<!-- ───────────────────────────── 17 ───────────────────────────── -->
+<h2 id="run">17. Run &amp; verify</h2>
+<h4>Manual single job (inside spark-master)</h4>
+<pre><code>docker exec &lt;proj&gt;-spark-master /opt/spark/bin/spark-submit \
+  --master spark://spark-master:7077 --deploy-mode client \
+  /opt/etl_app_spark/etl_app_spark/__main__.py \
+  --job bronze --table users --date 2026-05-01
+# → [bronze:users] date=2026-05-01 run_id=... rows=2350</code></pre>
+<h4>Via Airflow</h4>
+<pre><code>airflow dags trigger auth_etl --logical-date 2026-05-01T00:00:00+00:00</code></pre>
+<h4>Verify in Trino</h4>
+<pre><code>SHOW SCHEMAS FROM nessie LIKE 'auth_%';        -- auth_bronze, auth_silver, auth_gold
+SELECT count(*) FROM nessie.auth_bronze.users_raw;
+-- SCD2 check: two rows for a user who changed status
+SELECT user_nk, status, _effective_from, _effective_to, _is_current
+FROM nessie.auth_gold.dim_user WHERE user_nk = '&lt;id&gt;' ORDER BY _effective_from;</code></pre>
+<div class="ok"><strong>Where the Spark app shows:</strong> client-mode jobs finish in seconds, so they appear
+under <em>Completed Applications</em> in the Spark Master UI and in the History Server
+(<span class="pill">:18080</span>) — not under "Running".</div>
+
+<!-- ───────────────────────────── 18 ───────────────────────────── -->
+<h2 id="metaref">18. Meta-column reference</h2>
+<table>
+<tr><th>Layer</th><th>Columns</th><th>Meaning</th></tr>
+<tr><td><span class="tag t-br">bronze</span></td>
+    <td><code>ingest_ts, logical_date, source, raw_payload, _ingest_run_id, _source_system</code></td>
+    <td>When/where loaded, the run that loaded it, and the original row as JSON.</td></tr>
+<tr><td><span class="tag t-si">silver</span></td>
+    <td><code>_loaded_at, _record_hash, _source_logical_date</code></td>
+    <td>Load time, change-detection hash, and the bronze day it came from.</td></tr>
+<tr><td><span class="tag t-go">gold (dim_user)</span></td>
+    <td><code>user_sk, user_nk, _record_hash, _effective_from, _effective_to, _is_current</code></td>
+    <td>SCD2 surrogate/natural keys, validity window, and current-version flag.</td></tr>
+<tr><td><span class="tag t-go">gold (all)</span></td>
+    <td><code>_loaded_at</code></td>
+    <td>Build timestamp.</td></tr>
+</table>
+
+<footer>
+  Generated for <strong>ing-lakehouse / services/etl-app-spark</strong>. Diagrams render with Mermaid via CDN
+  (needs internet on first open). Code excerpts are abridged for readability — see the source files for the
+  complete implementation.
+</footer>
+
+</main>
+</div>
+</body>
+</html>

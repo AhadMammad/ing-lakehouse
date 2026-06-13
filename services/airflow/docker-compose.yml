@@ -99,6 +99,11 @@ x-airflow-common:
     # the database name differs (PG_DB=rideon).
     DBT_IMAGE: "${COMPOSE_PROJECT_NAME:-ing-lakehouse}-dbt:latest"
     RIDEON_SOURCE_DB: "${RIDEON_SOURCE_DB:-rideon}"
+    # auth_etl DAG: the spark-master container name to `docker exec` spark-submit
+    # into (matches container_name in services/spark/docker-compose.*), and the
+    # auth source DB name. PG creds are shared with payments/rideon above.
+    SPARK_MASTER_CONTAINER: "${COMPOSE_PROJECT_NAME:-ing-lakehouse}-spark-master"
+    AUTH_SOURCE_DB: "${AUTH_SOURCE_DB:-auth}"
   volumes:
     - ./dags:/opt/airflow/dags:ro
     - airflow-logs:/opt/airflow/logs

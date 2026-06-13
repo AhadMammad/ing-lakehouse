@@ -18,4 +18,31 @@ services:
     networks:
       - lakehouse-net
 
+  # ── Real-time auth simulation ─────────────────────────────────────
+  #  Long-lived service that continuously writes live auth activity into
+  #  the `auth` source DB. Kept out of `make up` via the `realtime`
+  #  profile — start with `make up-auth-realtime`, stop with
+  #  `make down-auth-realtime`. Uses the same image as data-generator.
+  auth-realtime:
+    image: ${COMPOSE_PROJECT_NAME:-ing-lakehouse}-data-generator:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["realtime"]
+    command:
+      - data_generator.auth_realtime
+      - --interval-seconds
+      - "${AUTH_REALTIME_INTERVAL:-5}"
+      - --rate
+      - "${AUTH_REALTIME_RATE:-3}"
+    environment:
+      PG_HOST: postgres-source
+      PG_PORT: "5432"
+      PG_DB: ${AUTH_SOURCE_DB:-auth}
+      PG_USER: ${POSTGRES_SOURCE_USER:-payments}
+      PG_PASSWORD: ${POSTGRES_SOURCE_PASSWORD:-payments123}
+    networks:
+      - lakehouse-net
+    restart: unless-stopped
+
 # lakehouse-net is defined in the root docker-compose.local.yml and inherited via include:

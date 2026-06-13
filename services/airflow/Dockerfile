@@ -35,3 +35,21 @@ RUN pip install --no-cache-dir \
 # See docs/airflow/operators-tasks.md for details and the smoke DAG at
 # services/airflow/dags/lakehouse_smoke.py which deliberately exercises
 # Trino + S3 only.
+#
+# The auth_etl DAG takes approach (c): a BashOperator runs
+# `docker exec <spark-master> spark-submit ...` against the docker-socket-proxy
+# (DOCKER_HOST=tcp://docker-socket-proxy:2375, which permits EXEC + POST). That
+# only needs the docker CLI *client* on PATH (no daemon, no JDK). Install it as
+# root, then drop back to the airflow user.
+USER root
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+ && install -m 0755 -d /etc/apt/keyrings \
+ && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+ && chmod a+r /etc/apt/keyrings/docker.asc \
+ && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo \"$VERSION_CODENAME\") stable" \
+      > /etc/apt/sources.list.d/docker.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends docker-ce-cli \
+ && rm -rf /var/lib/apt/lists/*
+USER airflow

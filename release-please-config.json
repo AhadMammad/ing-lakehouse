@@ -12,6 +12,7 @@
       "exclude-paths": [
         "services/data-generator",
         "services/etl-app",
+        "services/etl-app-spark",
         "services/dbt"
       ]
     },
@@ -29,6 +30,11 @@
       "package-name": "dbt",
       "release-type": "simple",
       "component": "dbt"
+    },
+    "services/etl-app-spark": {
+      "package-name": "etl-app-spark",
+      "release-type": "python",
+      "component": "etl-app-spark"
     }
   }
 }

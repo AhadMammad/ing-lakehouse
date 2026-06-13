@@ -1,20 +1,39 @@
 # ─────────────────────────────────────────────────────────────────
-#  Spark — single-node mode (master only, local development)
+#  Spark — local mode (master + 2 workers + history server)
 #
-#  Topology:
-#    spark-master  (no workers — use local[*] or spark://spark-master:7077)
+#  Uses the custom image built from services/etl-app-spark (Iceberg +
+#  Nessie REST + s3a jars + the etl_app_spark code baked in). The auth_etl
+#  DAG submits jobs by `docker exec`-ing spark-submit into spark-master
+#  (client mode: driver in master, executors on the 2 workers).
 #
 #  Ports (host):
-#    ${SPARK_MASTER_UI_PORT:-8080}  Spark master web UI
-#    ${SPARK_MASTER_PORT:-7077}     Spark master port (for job submission)
+#    ${SPARK_MASTER_UI_PORT:-8080}   Spark master web UI
+#    ${SPARK_MASTER_PORT:-7077}      Spark master port (job submission)
+#    ${SPARK_HISTORY_PORT:-18080}    Spark History Server UI
 # ─────────────────────────────────────────────────────────────────
+
+x-spark-image: &spark-image
+  image: ${COMPOSE_PROJECT_NAME:-ing-lakehouse}-spark:latest
+  build:
+    context: ../etl-app-spark
+    dockerfile: Dockerfile
+
+x-spark-s3-env: &spark-s3-env
+  # s3a (event logs) reads creds from AWS_* via EnvironmentVariableCredentialsProvider.
+  AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
+  AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
+  AWS_REGION: us-east-1
 
 services:
   spark-master:
-    image: ${SPARK_IMAGE:-apache/spark:3.5.3}
+    <<: *spark-image
+    container_name: ${COMPOSE_PROJECT_NAME:-ing-lakehouse}-spark-master
     user: root
+    env_file:
+      - ../../.env
     command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
     environment:
+      <<: *spark-s3-env
       SPARK_MASTER_HOST: spark-master
       SPARK_MASTER_PORT: "7077"
       SPARK_MASTER_WEBUI_PORT: "8080"
@@ -28,6 +47,71 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  spark-worker-1:
+    <<: *spark-image
+    container_name: ${COMPOSE_PROJECT_NAME:-ing-lakehouse}-spark-worker-1
+    user: root
+    env_file:
+      - ../../.env
+    command:
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.worker.Worker
+      - spark://spark-master:7077
+    environment:
+      <<: *spark-s3-env
+      SPARK_WORKER_MEMORY: ${SPARK_WORKER_MEMORY:-2g}
+      SPARK_WORKER_CORES: ${SPARK_WORKER_CORES:-2}
+      SPARK_WORKER_WEBUI_PORT: "8081"
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    networks:
+      - lakehouse-net
+    restart: unless-stopped
+
+  spark-worker-2:
+    <<: *spark-image
+    container_name: ${COMPOSE_PROJECT_NAME:-ing-lakehouse}-spark-worker-2
+    user: root
+    env_file:
+      - ../../.env
+    command:
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.worker.Worker
+      - spark://spark-master:7077
+    environment:
+      <<: *spark-s3-env
+      SPARK_WORKER_MEMORY: ${SPARK_WORKER_MEMORY:-2g}
+      SPARK_WORKER_CORES: ${SPARK_WORKER_CORES:-2}
+      SPARK_WORKER_WEBUI_PORT: "8081"
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    networks:
+      - lakehouse-net
+    restart: unless-stopped
+
+  spark-history-server:
+    <<: *spark-image
+    container_name: ${COMPOSE_PROJECT_NAME:-ing-lakehouse}-spark-history-server
+    user: root
+    env_file:
+      - ../../.env
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.history.HistoryServer"]
+    environment:
+      <<: *spark-s3-env
+    ports:
+      - "${SPARK_HISTORY_PORT:-18080}:18080"
+    networks:
+      - lakehouse-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:18080 || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5

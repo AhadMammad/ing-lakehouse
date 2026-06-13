@@ -37,6 +37,23 @@ def rides_exist_for_date(conn, date) -> int:
         return cur.fetchone()[0]
 
 
+def users_exist(conn) -> int:
+    """Return the current user count — used to decide whether to seed the cohort."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM users")
+        return cur.fetchone()[0]
+
+
+def auth_events_exist_for_date(conn, date) -> int:
+    """Return login_attempt count for `date` — used for the auth idempotency check."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT COUNT(*) FROM login_attempts WHERE attempted_at::date = %s",
+            (date,),
+        )
+        return cur.fetchone()[0]
+
+
 def bulk_insert(conn, table: str, rows: list[tuple], columns: list[str]) -> None:
     if not rows:
         return
