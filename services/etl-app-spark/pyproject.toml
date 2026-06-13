@@ -1,0 +1,22 @@
+[project]
+name = "etl_app_spark"
+version = "0.1.0"
+description = "OOP PySpark medallion ETL for the auth identity-service source (bronze/silver/gold on Iceberg+Nessie)"
+requires-python = ">=3.11"
+# pyspark is provided by the apache/spark base image at runtime; pinned here
+# only for local linting/dev parity with the cluster (Spark 3.5.3).
+dependencies = [
+    "pyspark==3.5.3",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["etl_app_spark*"]
+
+[tool.ruff.lint]
+# Permissive baseline matching services/etl-app: catch real breakage only.
+select = ["E9", "F63", "F7", "F82"]
