@@ -104,6 +104,10 @@ x-airflow-common:
     # auth source DB name. PG creds are shared with payments/rideon above.
     SPARK_MASTER_CONTAINER: "${COMPOSE_PROJECT_NAME:-ing-lakehouse}-spark-master"
     AUTH_SOURCE_DB: "${AUTH_SOURCE_DB:-auth}"
+    # OpenAQ air quality ETL credentials. Register a free key at openaq.org/register.
+    # Find location IDs at explore.openaq.org (copy numeric ID from the URL).
+    OPENAQ_API_KEY: "${OPENAQ_API_KEY:-}"
+    OPENAQ_LOCATION_IDS: "${OPENAQ_LOCATION_IDS:-}"
   volumes:
     - ./dags:/opt/airflow/dags:ro
     - airflow-logs:/opt/airflow/logs
