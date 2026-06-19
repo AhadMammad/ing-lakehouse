@@ -27,3 +27,11 @@ def _pg_uri() -> str:
 
 def get_postgres_uri() -> str:
     return _pg_uri()
+
+
+OPENAQ_API_KEY = os.environ.get("OPENAQ_API_KEY", "")
+OPENAQ_LOCATION_IDS = [
+    int(x.strip())
+    for x in os.environ.get("OPENAQ_LOCATION_IDS", "").split(",")
+    if x.strip()
+]
