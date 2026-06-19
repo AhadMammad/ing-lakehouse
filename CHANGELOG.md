@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/AhadMammad/ing-lakehouse/compare/v0.3.0...v0.4.0) (2026-06-19)
+
+
+### Features
+
+* **airflow:** add auth identity-service medallion ETL pipeline ([#25](https://github.com/AhadMammad/ing-lakehouse/issues/25)) ([ed2fd42](https://github.com/AhadMammad/ing-lakehouse/commit/ed2fd42525f4d0302fc2af3b7e9c1cc33c5ba400))
+* **etl-app:** add earthquake and air-quality medallion ETL pipelines ([#29](https://github.com/AhadMammad/ing-lakehouse/issues/29)) ([b86f6f5](https://github.com/AhadMammad/ing-lakehouse/commit/b86f6f5babc8d1a6e47fa81d54cbf1fc1aa31eb5))
+
 ## [0.3.0](https://github.com/AhadMammad/ing-lakehouse/compare/v0.2.0...v0.3.0) (2026-06-04)
 
 

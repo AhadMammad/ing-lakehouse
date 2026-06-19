@@ -1,7 +1,7 @@
 {
-  ".": "0.3.0",
-  "services/data-generator": "0.2.0",
+  ".": "0.4.0",
+  "services/data-generator": "0.3.0",
   "services/etl-app": "0.3.0",
-  "services/etl-app-spark": "0.1.0",
+  "services/etl-app-spark": "0.2.0",
   "services/dbt": "0.2.0"
 }
