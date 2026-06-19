@@ -1,6 +1,6 @@
 [project]
 name = "etl_app"
-version = "0.2.0"
+version = "0.3.0"
 description = "Daily weather ETL into the ing-lakehouse medallion (bronze/silver/gold)"
 requires-python = ">=3.11"
 dependencies = [
